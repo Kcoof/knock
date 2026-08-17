@@ -6,6 +6,15 @@ import type { PlayerIdentity } from "./net/RealtimeService";
 export interface CreateGameOptions {
   playerName?: string;
   netIdentity?: PlayerIdentity;
+  worldRooms?: Array<{
+    roomId: string;
+    ownerId: string;
+    username: string;
+    activity: string;
+    status: string;
+    doorState: string;
+  }>;
+  myRoomId?: string | null;
 }
 
 /** Creates the Phaser game bound to a parent element. Client-side only. */
@@ -39,5 +48,7 @@ export function createGame(parent: HTMLElement, options: CreateGameOptions = {})
   if (options.netIdentity) {
     game.registry.set("netIdentity", options.netIdentity);
   }
+  game.registry.set("worldRooms", options.worldRooms ?? []);
+  game.registry.set("myRoomId", options.myRoomId ?? null);
   return game;
 }

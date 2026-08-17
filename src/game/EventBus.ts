@@ -14,11 +14,19 @@ export interface KnockPayload {
   message: string;
 }
 
+export interface RoomUpdatePayload {
+  roomId: string;
+  doorState: "open" | "knock" | "focus";
+  activity: string;
+  username: string;
+}
+
 export interface GameEvents {
   "door:near": (door: DoorInfo | null) => void;
   "knock:open": (door: DoorInfo) => void;
   "dialog:open": (door: DoorInfo) => void;
   "knock:send": (payload: KnockPayload) => void;
+  "room:update": (payload: RoomUpdatePayload) => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }
