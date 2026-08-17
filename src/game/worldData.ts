@@ -184,8 +184,9 @@ export const NPCS: NpcV2[] = [
 /** Player spawn point in tiles. */
 export const SPAWN = { x: 19.5, y: 17.5 };
 
-/** Water pond rectangle in tiles. */
-export const POND = { x: 32, y: 26, w: 7, h: 7 };
+/** Water pond rectangle in tiles (kept one row clear of paths so the
+ * grass-water transition band always has grass to blend into). */
+export const POND = { x: 32, y: 27, w: 7, h: 6 };
 
 /** Brick plaza in tiles (center meeting point). */
 export const PLAZA = { x: 17, y: 15.5, w: 6, h: 4 };
@@ -203,8 +204,6 @@ export const PATHS: Array<{ x: number; y: number; w: number; h: number }> = [
   { x: 17, y: 25, w: 2, h: 2 }, // Focus Zone
   // Community <-> Library south walkway
   { x: 7, y: 25, w: 24, h: 1 },
-  // Library <-> pond boardwalk approach
-  { x: 35, y: 25, w: 2, h: 1 },
 ];
 
 /** Trees: top-left tile of a 2x3 stamp (canopy 2x2 + trunk row). */
@@ -295,43 +294,6 @@ export const DECOR: Array<{ tile: number; x: number; y: number }> = [
   { tile: 43, x: 3.5, y: 33.5 },
   { tile: 43, x: 15.5, y: 33.5 },
 ];
-
-/** Deterministic ground texture variation. */
-export function groundTileAt(tx: number, ty: number): number {
-  const h = (tx * 73856093) ^ (ty * 19349663);
-  const v = Math.abs(h % 100);
-  if (v < 70) return 0;
-  if (v < 90) return 1;
-  return 2;
-}
-
-/**
- * Mottled-grass overlay: returns an extra "detail" tile for some grass cells
- * (light dirt patches, dry spots) so the ground reads textured like a
- * hand-drawn map instead of a flat fill. 0 = no overlay.
- */
-export function grassDetailAt(tx: number, ty: number): number {
-  const h = (tx * 19349663) ^ (ty * 83492791);
-  const v = Math.abs(h % 100);
-  if (v < 6) return 24; // light sand patch
-  if (v < 11) return 36; // dirt patch
-  if (v < 14) return 39; // dry spot
-  if (v < 18) return 15; // grass/dirt blend corner
-  return 0;
-}
-
-/** Deterministic sand-path texture variation. */
-export function pathTileAt(tx: number, ty: number): number {
-  const h = (tx * 83492791) ^ (ty * 2971215073);
-  const v = Math.abs(h % 100);
-  if (v < 60) return 13;
-  if (v < 75) return 24;
-  if (v < 85) return 25;
-  if (v < 93) return 36;
-  if (v < 97) return 37;
-  if (v < 99) return 39;
-  return 40;
-}
 
 export function doorWorldPos(b: BuildingSpec): { x: number; y: number } {
   return {
