@@ -1,5 +1,8 @@
 export type DoorState = "open" | "knock" | "focus";
 
+/** Character spritesheet names available under /sprites/chars. */
+export type CharacterKey = "builder" | "noble" | "mage" | "traveler";
+
 export type PresenceStatus =
   | "Available"
   | "Working"
@@ -15,7 +18,7 @@ export interface BuildingSpec {
   x: number;
   y: number;
   w: number;
-  /** Total height in tiles: 2 roof rows + wall row + door row (or more). */
+  /** Total height in tiles: 2 roof rows + wall rows + door row. */
   h: number;
   roof: "red" | "red2" | "orange" | "stone";
   /** Door column offset from building left edge (in tiles). */
@@ -31,16 +34,4 @@ export interface DoorInfo {
   activity: string;
   status: PresenceStatus;
   state: DoorState;
-}
-
-export interface NpcSpec {
-  id: string;
-  name: string;
-  status: PresenceStatus;
-  activity: string;
-  tile: number;
-  /** Spawn position in tiles. */
-  x: number;
-  y: number;
-  facingLeft: boolean;
 }

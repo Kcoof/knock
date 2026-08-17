@@ -42,6 +42,7 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | --- | --- | --- |
 | 0 | `main` | Project scaffold, CI, spec in repo |
 | 1 | `feature/game-world` | Local playable prototype (map, player, doors, knock UI — mock data only) |
+| 1.5 | `feature/world-visuals` | Visual upgrade: trees, gardens, lamps, benches, plaza, animated Dawnlike characters |
 
 ## Asset licenses
 
