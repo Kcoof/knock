@@ -69,6 +69,7 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | 2 | `feature/auth` | Supabase foundation: auth, database schema + RLS migrations, profiles & auto-provisioned rooms, signed-in identity in the world |
 | 3 | `feature/realtime` | Realtime multiplayer: presence, throttled movement broadcast, interpolated remote players (guests included) |
 | 4 | `feature/rooms` | Real rooms & doors: world slots filled from the database, live door-state updates (DB + realtime), player status/activity panel |
+| 5 | `feature/knock` | Knock end-to-end: persisted knocks, live delivery to the owner, Let In / Not Now, result back to the visitor, pending knocks on load |
 
 ## Asset licenses
 
