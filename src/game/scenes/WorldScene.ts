@@ -53,6 +53,16 @@ interface DoorRuntime {
   building: BuildingSpec;
   x: number;
   y: number;
+  nameplate: Phaser.GameObjects.Text;
+  light: Phaser.GameObjects.Arc;
+  roomId?: string;
+}
+
+interface RoomUpdateEvent {
+  roomId: string;
+  doorState: "open" | "knock" | "focus";
+  activity: string;
+  username: string;
 }
 
 const ROOF_TILES: Record<BuildingSpec["roof"], { top: number; body: number }> = {
@@ -63,6 +73,9 @@ const ROOF_TILES: Record<BuildingSpec["roof"], { top: number; body: number }> = 
 };
 
 const CHAR_DIRS = ["down", "left", "right", "up"] as const;
+
+/** Personal building slots filled by real database rooms, in order. */
+const PERSONAL_SLOTS = ["reehana", "ahmed", "sara"];
 
 /** Idle frame (row start) per direction for a 2x4 character sheet. */
 function idleFrame(facing: number): number {
@@ -112,6 +125,16 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
+    try {
+      this.createWorld();
+    } catch (err) {
+      (window as unknown as { __knockCreateError?: string }).__knockCreateError =
+        err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+      throw err;
+    }
+  }
+
+  private createWorld(): void {
     this.doors = [];
     this.nearDoor = null;
     this.dialogOpen = false;
@@ -148,6 +171,10 @@ export class WorldScene extends Phaser.Scene {
       onGame("dialog:closed", () => {
         this.dialogOpen = false;
       }),
+      onGame("room:update", (event: RoomUpdateEvent) => {
+        this.applyRoomUpdate(event);
+        this.net?.sendRoomState(event);
+      }),
     );
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -177,6 +204,7 @@ export class WorldScene extends Phaser.Scene {
       this.net = new RealtimeService(supabase, identity, {
         onPlayers: (players) => this.syncRemotePlayers(players),
         onPosition: (event) => this.onRemotePosition(event),
+        onRoomState: (event) => this.applyRoomUpdate(event),
       });
       void this.net.connect();
     } catch {
@@ -453,7 +481,7 @@ export class WorldScene extends Phaser.Scene {
           .setVisible(false),
       );
 
-      this.addNameplate(b);
+      this.lastNameplate = this.addNameplate(b);
       this.addDoor(b);
     }
 
@@ -494,12 +522,12 @@ export class WorldScene extends Phaser.Scene {
     rt.render();
   }
 
-  private addNameplate(b: BuildingSpec): void {
-    const info = DOORS[b.id];
+  private addNameplate(b: BuildingSpec): Phaser.GameObjects.Text {
+    const info = this.roomDoorInfo(b);
     const line2 = b.roomType === "personal" ? info.activity : doorStateLabel(info.state);
     const cx = b.x * TILE + (b.w * TILE) / 2;
-    this.add
-      .text(cx, b.y * TILE - 5, `${b.name}\n${line2}`, {
+    return this.add
+      .text(cx, b.y * TILE - 5, `${info.buildingName}\n${line2}`, {
         fontFamily: "monospace",
         fontSize: "10px",
         color: "#e4e4e7",
@@ -512,8 +540,37 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(20);
   }
 
+  /**
+   * Real rooms from the database replace the mock residents: the three
+   * personal slots are filled with the freshest actual rooms (guests and
+   * empty databases keep the mock neighborhood so the world always works).
+   */
+  private roomDoorInfo(b: BuildingSpec): (typeof DOORS)[string] {
+    if (b.roomType !== "personal") return DOORS[b.id];
+    const rooms = (this.registry.get("worldRooms") ?? []) as Array<{
+      roomId: string;
+      ownerId: string;
+      username: string;
+      activity: string;
+      doorState: "open" | "knock" | "focus" | "private";
+    }>;
+    const slot = PERSONAL_SLOTS.indexOf(b.id);
+    if (slot === -1) return DOORS[b.id];
+    const mock = DOORS[b.id];
+    const room = rooms[slot];
+    if (!room) return mock;
+    return {
+      ...mock,
+      id: b.id,
+      buildingName: `${room.username}'s Room`,
+      owner: room.username,
+      activity: room.activity || "Building something",
+      state: room.doorState === "private" ? "focus" : room.doorState,
+    };
+  }
+
   private addDoor(b: BuildingSpec): void {
-    const info = DOORS[b.id];
+    const info = this.roomDoorInfo(b);
     const pos = doorWorldPos(b);
 
     const light = this.add
@@ -527,7 +584,32 @@ export class WorldScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.doors.push({ info, building: b, x: pos.x, y: pos.y });
+    const rooms = (this.registry.get("worldRooms") ?? []) as Array<{ roomId: string }>;
+    const slot = PERSONAL_SLOTS.indexOf(b.id);
+    const roomId = slot !== -1 ? rooms[slot]?.roomId : undefined;
+
+    this.doors.push({ info, building: b, x: pos.x, y: pos.y, nameplate: this.lastNameplate!, light, roomId });
+  }
+
+  private lastNameplate?: Phaser.GameObjects.Text;
+
+  /** Live door updates from this tab's HUD or from other players. */
+  private applyRoomUpdate(event: RoomUpdateEvent): void {
+    const door = this.doors.find((d) => d.roomId === event.roomId);
+    if (!door) return;
+    door.info = {
+      ...door.info,
+      owner: event.username,
+      buildingName: `${event.username}'s Room`,
+      activity: event.activity || "Building something",
+      state: event.doorState,
+    };
+    door.light.setFillStyle(DOOR_STATE_COLORS[event.doorState]);
+    const line2 =
+      door.building.roomType === "personal"
+        ? door.info.activity
+        : doorStateLabel(door.info.state);
+    door.nameplate.setText(`${door.info.buildingName}\n${line2}`);
   }
 
   private buildTrees(solids: Phaser.Physics.Arcade.StaticGroup): void {

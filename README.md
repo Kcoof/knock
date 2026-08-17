@@ -68,6 +68,7 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | 1.5 | `feature/world-visuals` | Visual upgrade: trees, gardens, lamps, benches, plaza, animated Dawnlike characters |
 | 2 | `feature/auth` | Supabase foundation: auth, database schema + RLS migrations, profiles & auto-provisioned rooms, signed-in identity in the world |
 | 3 | `feature/realtime` | Realtime multiplayer: presence, throttled movement broadcast, interpolated remote players (guests included) |
+| 4 | `feature/rooms` | Real rooms & doors: world slots filled from the database, live door-state updates (DB + realtime), player status/activity panel |
 
 ## Asset licenses
 

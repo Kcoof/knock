@@ -17,6 +17,14 @@ export interface PositionEvent {
   moving: boolean;
 }
 
+/** A door/status update for a real room, local or from another player. */
+export interface RoomStateEvent {
+  roomId: string;
+  doorState: "open" | "knock" | "focus";
+  activity: string;
+  username: string;
+}
+
 interface PresenceState {
   key: string;
   username: string;
@@ -44,6 +52,7 @@ export class RealtimeService {
     private handlers: {
       onPlayers: (players: PresenceState[]) => void;
       onPosition: (event: PositionEvent) => void;
+      onRoomState?: (event: RoomStateEvent) => void;
     },
   ) {}
 
@@ -66,6 +75,10 @@ export class RealtimeService {
       .on("broadcast", { event: "pos" }, ({ payload }) => {
         const event = payload as PositionEvent;
         if (event.key !== this.identity.key) this.handlers.onPosition(event);
+      })
+      .on("broadcast", { event: "room" }, ({ payload }) => {
+        const event = payload as RoomStateEvent;
+        if (event.roomId) this.handlers.onRoomState?.(event);
       });
 
     await this.channel.subscribe(async (status) => {
@@ -92,6 +105,15 @@ export class RealtimeService {
       type: "broadcast",
       event: "pos",
       payload: { key: this.identity.key, x, y, dir, moving },
+    });
+  }
+
+  /** Broadcast a door/status change for a real room to everyone online. */
+  sendRoomState(event: RoomStateEvent): void {
+    void this.channel?.send({
+      type: "broadcast",
+      event: "room",
+      payload: event,
     });
   }
 
