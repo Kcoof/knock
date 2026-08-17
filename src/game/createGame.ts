@@ -2,9 +2,13 @@ import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
 import { WorldScene } from "./scenes/WorldScene";
 
+export interface CreateGameOptions {
+  playerName?: string;
+}
+
 /** Creates the Phaser game bound to a parent element. Client-side only. */
-export function createGame(parent: HTMLElement): Phaser.Game {
-  return new Phaser.Game({
+export function createGame(parent: HTMLElement, options: CreateGameOptions = {}): Phaser.Game {
+  const game = new Phaser.Game({
     // Canvas 2D renderer: a prototype-sized world blits fine, and the 2D
     // canvas stays readable for screenshots, tests, and screen sharing.
     type: Phaser.CANVAS,
@@ -27,4 +31,8 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     },
     scene: [BootScene, WorldScene],
   });
+  if (options.playerName) {
+    game.registry.set("playerName", options.playerName);
+  }
+  return game;
 }

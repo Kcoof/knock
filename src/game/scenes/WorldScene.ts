@@ -512,13 +512,31 @@ export class WorldScene extends Phaser.Scene {
     this.player.setFrame(idleFrame(this.currentDir));
     this.physics.add.collider(this.player, solids);
 
-    // keep the shadow glued to the player's feet
+    const playerName = this.registry.get("playerName") as string | undefined;
+    if (playerName) {
+      this.playerLabel = this.add
+        .text(px, py - 22, playerName, {
+          fontFamily: "monospace",
+          fontSize: "6px",
+          color: "#fbbf24",
+          backgroundColor: "#18181bcc",
+          padding: { x: 2, y: 1 },
+          resolution: 3,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(51);
+    }
+
+    // keep the shadow and label glued to the player's feet/head
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, () => {
       if (this.player?.active) {
         this.playerShadow.setPosition(this.player.x, this.player.y + 2);
+        this.playerLabel?.setPosition(this.player.x, this.player.y - 22);
       }
     });
   }
+
+  private playerLabel?: Phaser.GameObjects.Text;
 
   // --- interaction --------------------------------------------------------
 

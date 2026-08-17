@@ -27,6 +27,29 @@ npm run dev
 
 Open http://localhost:3000 — the pixel world lives at `/world`.
 
+## Connecting Supabase (Phase 2+)
+
+Without Supabase the app runs in **guest mode** (mock data, no accounts).
+To enable real accounts, rooms and the database:
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Copy `.env.example` to `.env.local` and fill in:
+   - `NEXT_PUBLIC_SUPABASE_URL` — Project Settings → API → Project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Project Settings → API → anon public key
+3. Apply the database schema: open the Supabase Dashboard → SQL Editor,
+   paste the contents of `supabase/migrations/0001_init.sql`, and run it.
+   (This creates the tables, Row Level Security policies, and the trigger
+   that gives every new account a profile and a personal room.)
+4. Authentication → Providers → Email is enabled by default. For a smooth
+   dev flow, disable "Confirm email" under Authentication → Settings while
+   testing. Also add your deployment URLs under Authentication → URL
+   Configuration if you use magic links later.
+5. Add the same two environment variables in Vercel → Project → Settings →
+   Environment Variables, then redeploy.
+
+The service-role key is intentionally not used anywhere — the client talks
+to Supabase with the anon key and Row Level Security enforces access.
+
 ## Development workflow
 
 This project is built phase by phase (see the spec, §42). Every phase:
@@ -43,6 +66,7 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | 0 | `main` | Project scaffold, CI, spec in repo |
 | 1 | `feature/game-world` | Local playable prototype (map, player, doors, knock UI — mock data only) |
 | 1.5 | `feature/world-visuals` | Visual upgrade: trees, gardens, lamps, benches, plaza, animated Dawnlike characters |
+| 2 | `feature/auth` | Supabase foundation: auth, database schema + RLS migrations, profiles & auto-provisioned rooms, signed-in identity in the world |
 
 ## Asset licenses
 

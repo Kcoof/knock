@@ -1,18 +1,15 @@
-"use client";
+import WorldClient from "@/components/WorldClient";
+import { getProfile } from "@/lib/supabase/server";
 
-import dynamic from "next/dynamic";
+export const dynamic = "force-dynamic";
 
-const GameShell = dynamic(() => import("@/components/GameShell"), {
-  ssr: false,
-  loading: () => (
-    <div className="fixed inset-0 flex items-center justify-center bg-zinc-950">
-      <p className="font-pixel animate-pulse text-[10px] text-emerald-300">
-        ENTERING THE WORLD...
-      </p>
-    </div>
-  ),
-});
+export default async function WorldPage() {
+  const profile = await getProfile();
 
-export default function WorldPage() {
-  return <GameShell />;
+  return (
+    <WorldClient
+      playerName={profile?.username ?? "Guest Builder"}
+      activity={profile?.activity_text || "exploring the prototype"}
+    />
+  );
 }
