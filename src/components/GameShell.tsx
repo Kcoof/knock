@@ -13,7 +13,13 @@ const STATE_BADGE: Record<string, string> = {
   focus: "bg-red-500/15 text-red-300 border-red-500/40",
 };
 
-export default function GameShell() {
+export default function GameShell({
+  playerName = "Guest Builder",
+  activity = "exploring the prototype",
+}: {
+  playerName?: string;
+  activity?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const [nearDoor, setNearDoor] = useState<DoorInfo | null>(null);
@@ -22,14 +28,14 @@ export default function GameShell() {
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const game = createGame(containerRef.current);
+    const game = createGame(containerRef.current, { playerName });
     gameRef.current = game;
     (window as unknown as { __KNOCK_GAME?: Phaser.Game }).__KNOCK_GAME = game;
     return () => {
       game.destroy(true);
       gameRef.current = null;
     };
-  }, []);
+  }, [playerName]);
 
   useEffect(() => {
     const offs = [
@@ -69,8 +75,10 @@ export default function GameShell() {
 
       {/* top-left player badge */}
       <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 backdrop-blur-sm">
-        <p className="font-pixel text-[9px] leading-relaxed text-emerald-300">GUEST BUILDER</p>
-        <p className="mt-1 text-xs text-zinc-400">Available — exploring the prototype</p>
+        <p className="font-pixel text-[9px] leading-relaxed text-emerald-300">
+          {playerName.toUpperCase()}
+        </p>
+        <p className="mt-1 text-xs text-zinc-400">Available — {activity}</p>
       </div>
 
       {/* toast */}
