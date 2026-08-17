@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DOOR_STATE_LABELS, KNOCK_REASONS } from "@/game/constants";
 import type { DoorInfo } from "@/game/types";
 import type { WorldRoom } from "@/lib/rooms";
+import type { PendingKnock } from "@/lib/knocks";
 
 const STATE_BADGE: Record<string, string> = {
   open: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
@@ -22,6 +23,7 @@ export default function GameShell({
   char = "builder",
   worldRooms = [],
   myRoom = null,
+  pendingKnocks = [],
 }: {
   playerName?: string;
   activity?: string;
@@ -29,12 +31,14 @@ export default function GameShell({
   char?: string;
   worldRooms?: WorldRoom[];
   myRoom?: WorldRoom | null;
+  pendingKnocks?: PendingKnock[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const [nearDoor, setNearDoor] = useState<DoorInfo | null>(null);
   const [dialog, setDialog] = useState<DoorInfo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [knocks, setKnocks] = useState<PendingKnock[]>(pendingKnocks);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -66,6 +70,19 @@ export default function GameShell({
       onGame("door:near", (door) => setNearDoor(door)),
       onGame("knock:open", (door) => setDialog(door)),
       onGame("toast", (text) => setToast(text)),
+      onGame("knock:incoming", (event) => {
+        setKnocks((current) => [
+          {
+            id: event.knockId,
+            reason: event.reason,
+            message: event.message,
+            visitorName: event.visitorName,
+            visitorId: event.visitorKey,
+            createdAt: new Date().toISOString(),
+          },
+          ...current.filter((k) => k.id !== event.knockId),
+        ]);
+      }),
     ];
     return () => offs.forEach((off) => off());
   }, []);
@@ -111,6 +128,11 @@ export default function GameShell({
       {/* signed-in room controls */}
       {userId && myRoom && (
         <PlayerPanel playerName={playerName} initialActivity={activity} myRoom={myRoom} />
+      )}
+
+      {/* knocks at my door — live and while-away */}
+      {userId && myRoom && knocks.length > 0 && (
+        <KnockQueue roomId={myRoom.roomId} knocks={knocks} onResolved={() => setKnocks([])} />
       )}
 
       {/* toast */}
@@ -278,6 +300,79 @@ function PlayerPanel({
         {saving ? "Saving…" : "Update my door"}
       </button>
       {note && <p className="mt-2 text-center text-[10px] text-zinc-400">{note}</p>}
+    </div>
+  );
+}
+
+function KnockQueue({
+  roomId,
+  knocks,
+  onResolved,
+}: {
+  roomId: string;
+  knocks: PendingKnock[];
+  onResolved: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const respond = async (knock: PendingKnock, accepted: boolean) => {
+    setBusy(knock.id);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("knocks")
+        .update({ status: accepted ? "accepted" : "declined" })
+        .eq("id", knock.id);
+      if (error) throw error;
+      emitGame("knock:respond", {
+        knockId: knock.id,
+        roomId,
+        visitorKey: knock.visitorId,
+        accepted,
+      });
+      onResolved();
+    } catch {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="absolute left-1/2 top-3 z-20 w-80 -translate-x-1/2 space-y-2">
+      {knocks.map((knock) => (
+        <div
+          key={knock.id}
+          className="rounded-lg border border-yellow-500/50 bg-zinc-900/95 p-4 shadow-xl backdrop-blur-sm"
+          role="alert"
+        >
+          <p className="font-pixel text-[9px] text-yellow-300">KNOCK KNOCK</p>
+          <p className="mt-2 text-sm text-zinc-100">
+            <span className="font-medium text-yellow-200">{knock.visitorName}</span> is outside your
+            room.
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">
+            {knock.reason}
+            {knock.message ? ` — “${knock.message}”` : ""}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={busy === knock.id}
+              onClick={() => respond(knock, true)}
+              className="flex-1 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-medium text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+            >
+              Let In
+            </button>
+            <button
+              type="button"
+              disabled={busy === knock.id}
+              onClick={() => respond(knock, false)}
+              className="flex-1 rounded-lg border border-zinc-600 px-3 py-2 text-xs text-zinc-300 hover:border-zinc-400 disabled:opacity-50"
+            >
+              Not Now
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
