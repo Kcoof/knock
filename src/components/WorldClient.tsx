@@ -16,9 +16,13 @@ const GameShell = dynamic(() => import("@/components/GameShell"), {
 export default function WorldClient({
   playerName,
   activity,
+  userId,
+  char,
 }: {
   playerName: string;
   activity: string;
+  userId: string | null;
+  char: string;
 }) {
-  return <GameShell playerName={playerName} activity={activity} />;
+  return <GameShell playerName={playerName} activity={activity} userId={userId} char={char} />;
 }
