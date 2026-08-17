@@ -21,12 +21,36 @@ export interface RoomUpdatePayload {
   username: string;
 }
 
+export interface IncomingKnockPayload {
+  knockId: string;
+  roomId: string;
+  visitorName: string;
+  reason: string;
+  message: string;
+  visitorKey: string;
+}
+
+export interface KnockResultPayload {
+  knockId: string;
+  accepted: boolean;
+  ownerName: string;
+}
+
+export interface KnockRespondPayload {
+  knockId: string;
+  roomId: string;
+  visitorKey: string;
+  accepted: boolean;
+}
+
 export interface GameEvents {
   "door:near": (door: DoorInfo | null) => void;
   "knock:open": (door: DoorInfo) => void;
   "dialog:open": (door: DoorInfo) => void;
   "knock:send": (payload: KnockPayload) => void;
   "room:update": (payload: RoomUpdatePayload) => void;
+  "knock:incoming": (payload: IncomingKnockPayload) => void;
+  "knock:respond": (payload: KnockRespondPayload) => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }

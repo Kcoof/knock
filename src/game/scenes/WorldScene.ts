@@ -163,7 +163,7 @@ export class WorldScene extends Phaser.Scene {
     window.addEventListener("keyup", this.onKeyUp);
 
     this.unsubscribers.push(
-      onGame("knock:send", (payload) => this.onKnockSent(payload.doorId)),
+      onGame("knock:send", (payload) => this.onKnockSent(payload.doorId, payload.reason, payload.message)),
       onGame("dialog:open", () => {
         // opened from the React HUD (click/tap path) — freeze movement
         this.dialogOpen = true;
@@ -174,6 +174,16 @@ export class WorldScene extends Phaser.Scene {
       onGame("room:update", (event: RoomUpdateEvent) => {
         this.applyRoomUpdate(event);
         this.net?.sendRoomState(event);
+      }),
+      onGame("knock:respond", (response) => {
+        const identity = this.registry.get("netIdentity") as { username: string } | undefined;
+        this.net?.sendKnockResult({
+          knockId: response.knockId,
+          roomId: response.roomId,
+          visitorKey: response.visitorKey,
+          accepted: response.accepted,
+          ownerName: identity?.username ?? "The owner",
+        });
       }),
     );
 
@@ -205,6 +215,18 @@ export class WorldScene extends Phaser.Scene {
         onPlayers: (players) => this.syncRemotePlayers(players),
         onPosition: (event) => this.onRemotePosition(event),
         onRoomState: (event) => this.applyRoomUpdate(event),
+        onKnock: (event) => this.onIncomingKnock(event),
+        onKnockResult: (event) => {
+          const identity = this.registry.get("netIdentity") as { key: string } | undefined;
+          if (identity && event.visitorKey === identity.key) {
+            emitGame(
+              "toast",
+              event.accepted
+                ? `🟢 ${event.ownerName} let you in! (Room interiors arrive in Phase 6)`
+                : `${event.ownerName} said "not now" — maybe later.`,
+            );
+          }
+        },
       });
       void this.net.connect();
     } catch {
@@ -866,14 +888,96 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private onKnockSent(doorId: string): void {
+  private onKnockSent(doorId: string, reason: string, message: string): void {
     const door = this.doors.find((d) => d.info.id === doorId);
     if (!door) return;
 
+    this.showKnockBubble(door);
+    const identity = this.registry.get("netIdentity") as
+      | { key: string; username: string; guest: boolean }
+      | undefined;
+
+    if (!door.roomId) {
+      // mock door (guest world) — keep the local mock flow
+      emitGame("toast", `Knock sent to ${door.info.owner} — realtime delivery arrives in Phase 3.`);
+      return;
+    }
+    if (!identity || identity.guest) {
+      emitGame("toast", `${door.info.owner} has a real room — sign in to knock for real.`);
+      return;
+    }
+    if (door.roomId === (this.registry.get("myRoomId") ?? null)) {
+      emitGame("toast", "That's your own room — no need to knock 🙂");
+      return;
+    }
+
+    // real knock: persist it, then deliver live if the owner is online
+    this.persistKnock(door, identity, reason, message);
+  }
+
+  private async persistKnock(
+    door: DoorRuntime,
+    identity: { key: string; username: string; guest: boolean },
+    reason: string,
+    message: string,
+  ): Promise<void> {
+    const knockId = crypto.randomUUID();
+    emitGame("toast", `Knocking on ${door.info.owner}'s door…`);
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const { error } = await supabase.from("knocks").insert({
+        id: knockId,
+        room_id: door.roomId,
+        visitor_id: identity.key,
+        reason,
+        message,
+      });
+      if (error) throw error;
+    } catch {
+      emitGame("toast", "Could not send the knock — try again.");
+      return;
+    }
+
+    this.net?.sendKnock({
+      knockId,
+      roomId: door.roomId!,
+      visitorKey: identity.key,
+      visitorName: identity.username,
+      reason,
+      message,
+    });
+    emitGame("toast", `Knock sent to ${door.info.owner} — waiting by the door…`);
+  }
+
+  /** The owner side: someone knocked at MY door in real time. */
+  private onIncomingKnock(event: {
+    knockId: string;
+    roomId: string;
+    visitorKey: string;
+    visitorName: string;
+    reason: string;
+    message: string;
+  }): void {
+    const myRoomId = this.registry.get("myRoomId");
+    if (event.roomId !== myRoomId) return;
+    const door = this.doors.find((d) => d.roomId === event.roomId);
+    if (door) this.showKnockBubble(door);
+    emitGame("knock:incoming", {
+      knockId: event.knockId,
+      roomId: event.roomId,
+      visitorName: event.visitorName,
+      reason: event.reason,
+      message: event.message,
+      visitorKey: event.visitorKey,
+    });
+  }
+
+  private showKnockBubble(door: DoorRuntime): void {
     const bubble = this.add
-      .text(door.x, door.building.y * TILE - 18, "!", {
+      .text(door.x, door.building.y * TILE - 30, "!", {
         fontFamily: "monospace",
-        fontSize: "10px",
+        fontSize: "14px",
         fontStyle: "bold",
         color: "#fde047",
         backgroundColor: "#18181be6",
@@ -893,10 +997,5 @@ export class WorldScene extends Phaser.Scene {
         this.time.delayedCall(2400, () => bubble.destroy());
       },
     });
-
-    emitGame(
-      "toast",
-      `Knock sent to ${door.info.owner} — realtime delivery arrives in Phase 3.`,
-    );
   }
 }

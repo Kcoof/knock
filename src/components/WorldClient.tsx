@@ -14,6 +14,7 @@ const GameShell = dynamic(() => import("@/components/GameShell"), {
 });
 
 import type { WorldRoom } from "@/lib/rooms";
+import type { PendingKnock } from "@/lib/knocks";
 
 export default function WorldClient({
   playerName,
@@ -22,6 +23,7 @@ export default function WorldClient({
   char,
   worldRooms,
   myRoom,
+  pendingKnocks,
 }: {
   playerName: string;
   activity: string;
@@ -29,6 +31,7 @@ export default function WorldClient({
   char: string;
   worldRooms: WorldRoom[];
   myRoom: WorldRoom | null;
+  pendingKnocks: PendingKnock[];
 }) {
   return (
     <GameShell
@@ -38,6 +41,7 @@ export default function WorldClient({
       char={char}
       worldRooms={worldRooms}
       myRoom={myRoom}
+      pendingKnocks={pendingKnocks}
     />
   );
 }

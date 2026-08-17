@@ -25,6 +25,25 @@ export interface RoomStateEvent {
   username: string;
 }
 
+/** A knock being delivered live to the room owner. */
+export interface KnockEvent {
+  knockId: string;
+  roomId: string;
+  visitorKey: string;
+  visitorName: string;
+  reason: string;
+  message: string;
+}
+
+/** The owner's answer to a knock. */
+export interface KnockResultEvent {
+  knockId: string;
+  roomId: string;
+  visitorKey: string;
+  accepted: boolean;
+  ownerName: string;
+}
+
 interface PresenceState {
   key: string;
   username: string;
@@ -53,6 +72,8 @@ export class RealtimeService {
       onPlayers: (players: PresenceState[]) => void;
       onPosition: (event: PositionEvent) => void;
       onRoomState?: (event: RoomStateEvent) => void;
+      onKnock?: (event: KnockEvent) => void;
+      onKnockResult?: (event: KnockResultEvent) => void;
     },
   ) {}
 
@@ -79,6 +100,12 @@ export class RealtimeService {
       .on("broadcast", { event: "room" }, ({ payload }) => {
         const event = payload as RoomStateEvent;
         if (event.roomId) this.handlers.onRoomState?.(event);
+      })
+      .on("broadcast", { event: "knock" }, ({ payload }) => {
+        this.handlers.onKnock?.(payload as KnockEvent);
+      })
+      .on("broadcast", { event: "knock_result" }, ({ payload }) => {
+        this.handlers.onKnockResult?.(payload as KnockResultEvent);
       });
 
     await this.channel.subscribe(async (status) => {
@@ -113,6 +140,24 @@ export class RealtimeService {
     void this.channel?.send({
       type: "broadcast",
       event: "room",
+      payload: event,
+    });
+  }
+
+  /** Deliver a knock live to the room owner. */
+  sendKnock(event: KnockEvent): void {
+    void this.channel?.send({
+      type: "broadcast",
+      event: "knock",
+      payload: event,
+    });
+  }
+
+  /** Deliver the owner's answer back to the visitor. */
+  sendKnockResult(event: KnockResultEvent): void {
+    void this.channel?.send({
+      type: "broadcast",
+      event: "knock_result",
       payload: event,
     });
   }
