@@ -72,6 +72,9 @@ export default function GameShell({
   return (
     <div className="fixed inset-0 overflow-hidden bg-zinc-950">
       <div ref={containerRef} className="absolute inset-0" data-testid="game-root" />
+      {/* ambient grade: warm sunlight tint + soft vignette for painterly cohesion */}
+      <div className="pointer-events-none absolute inset-0 z-[5] bg-amber-200 opacity-[0.04]" />
+      <div className="pointer-events-none absolute inset-0 z-[5] bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(8,12,6,0.38)_100%)]" />
 
       {/* top-left player badge */}
       <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3 py-2 backdrop-blur-sm">
