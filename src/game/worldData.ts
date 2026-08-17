@@ -305,6 +305,21 @@ export function groundTileAt(tx: number, ty: number): number {
   return 2;
 }
 
+/**
+ * Mottled-grass overlay: returns an extra "detail" tile for some grass cells
+ * (light dirt patches, dry spots) so the ground reads textured like a
+ * hand-drawn map instead of a flat fill. 0 = no overlay.
+ */
+export function grassDetailAt(tx: number, ty: number): number {
+  const h = (tx * 19349663) ^ (ty * 83492791);
+  const v = Math.abs(h % 100);
+  if (v < 6) return 24; // light sand patch
+  if (v < 11) return 36; // dirt patch
+  if (v < 14) return 39; // dry spot
+  if (v < 18) return 15; // grass/dirt blend corner
+  return 0;
+}
+
 /** Deterministic sand-path texture variation. */
 export function pathTileAt(tx: number, ty: number): number {
   const h = (tx * 83492791) ^ (ty * 2971215073);

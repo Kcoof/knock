@@ -26,6 +26,7 @@ import {
   TREES,
   doorStateLabel,
   doorWorldPos,
+  grassDetailAt,
   groundTileAt,
   pathTileAt,
 } from "../worldData";
@@ -185,9 +186,15 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(-10);
     this.ground = rt;
 
+    // track which cells are path/pond so we can blend grass edges onto them
+    const painted = new Set<string>();
+    const mark = (tx: number, ty: number) => painted.add(`${tx},${ty}`);
+
     for (let ty = 0; ty < MAP_H; ty++) {
       for (let tx = 0; tx < MAP_W; tx++) {
         rt.draw(`t${groundTileAt(tx, ty)}`, tx * TILE, ty * TILE);
+        const detail = grassDetailAt(tx, ty);
+        if (detail) rt.draw(`t${detail}`, tx * TILE, ty * TILE);
       }
     }
 
@@ -196,6 +203,7 @@ export class WorldScene extends Phaser.Scene {
       for (let ty = p.y; ty < p.y + p.h; ty++) {
         for (let tx = p.x; tx < p.x + p.w; tx++) {
           rt.draw(`t${pathTileAt(tx, ty)}`, tx * TILE, ty * TILE);
+          mark(tx, ty);
         }
       }
     }
@@ -209,6 +217,7 @@ export class WorldScene extends Phaser.Scene {
           tx === PLAZA.x ||
           tx === PLAZA.x + PLAZA.w - 1;
         rt.draw(border ? "t121" : "t126", tx * TILE, ty * TILE);
+        mark(tx, ty);
       }
     }
 
@@ -220,7 +229,24 @@ export class WorldScene extends Phaser.Scene {
         else if ((tx + ty) % 5 === 0) key = "t51";
         else if (ty === POND.y + POND.h - 1 || tx === POND.x || tx === POND.x + POND.w - 1) key = "t49";
         rt.draw(key, tx * TILE, ty * TILE);
+        mark(tx, ty);
       }
+    }
+
+    // terrain blending: grass/dirt corner tiles hug path & pond edges so the
+    // ground transitions softly instead of switching flatly (reference look)
+    const blend = (tx: number, ty: number) => {
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return;
+      if (painted.has(`${tx},${ty}`)) return;
+      const h = (tx * 73856093) ^ (ty * 19349663);
+      if (Math.abs(h % 100) < 75) rt.draw("t15", tx * TILE, ty * TILE);
+    };
+    for (const key of painted) {
+      const [tx, ty] = key.split(",").map(Number);
+      blend(tx, ty - 1);
+      blend(tx, ty + 1);
+      blend(tx - 1, ty);
+      blend(tx + 1, ty);
     }
 
     // bake bushes and flowers into the ground
@@ -281,6 +307,39 @@ export class WorldScene extends Phaser.Scene {
       this.addDoor(b);
     }
 
+    // soft drop shadows behind buildings for depth (reference look)
+    for (const b of BUILDINGS) {
+      this.add
+        .rectangle(
+          b.x * TILE + (b.w * TILE) / 2 + 6,
+          b.y * TILE + ((b.h - 1) * TILE) / 2 + 6,
+          b.w * TILE,
+          (b.h - 1) * TILE,
+          0x000000,
+          0.14,
+        )
+        .setOrigin(0.5)
+        .setDepth(-9);
+    }
+
+    // animated water shimmer highlights on the pond
+    for (let i = 0; i < 9; i++) {
+      const hx = (POND.x + 1 + ((i * 73856093) % (POND.w - 2))) * TILE + 8;
+      const hy = (POND.y + 1 + ((i * 19349663) % (POND.h - 3))) * TILE + 8;
+      const shimmer = this.add
+        .ellipse(hx, hy, 7, 2.5, 0xe8f4ff, 0.22)
+        .setDepth(-8);
+      this.tweens.add({
+        targets: shimmer,
+        alpha: { from: 0.05, to: 0.3 },
+        scaleX: { from: 0.7, to: 1.15 },
+        duration: 1300 + ((i * 613) % 900),
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.InOut",
+      });
+    }
+
     // Phaser 4 buffers RenderTexture draw commands — flush them
     rt.render();
   }
@@ -325,6 +384,10 @@ export class WorldScene extends Phaser.Scene {
     for (const t of TREES) {
       const px = t.x * TILE;
       const py = t.y * TILE;
+      // soft ground shadow under the canopy, drawn before the tree
+      this.add
+        .ellipse(px + 18, py + 40, 26, 9, 0x000000, 0.18)
+        .setDepth(-7);
       const sprite = this.add
         .image(px, py, t.variant === "A" ? "treeA" : "treeB")
         .setOrigin(0, 0)
