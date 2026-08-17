@@ -28,6 +28,25 @@ import {
   doorWorldPos,
 } from "../worldData";
 import type { BuildingSpec, CharacterKey } from "../types";
+import { RealtimeService } from "../net/RealtimeService";
+import type { PlayerIdentity, PositionEvent } from "../net/RealtimeService";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
+
+interface RemotePlayer {
+  key: string;
+  username: string;
+  char: string;
+  guest: boolean;
+  sprite: Phaser.GameObjects.Sprite;
+  shadow: Phaser.GameObjects.Ellipse;
+  label: Phaser.GameObjects.Text;
+  targetX: number;
+  targetY: number;
+  dir: number;
+  moving: boolean;
+  lastSeen: number;
+}
 
 interface DoorRuntime {
   info: (typeof DOORS)[string];
@@ -63,6 +82,8 @@ export class WorldScene extends Phaser.Scene {
   private dialogOpen = false;
   private currentDir = 0; // 0 down, 1 left, 2 right, 3 up
   private unsubscribers: Array<() => void> = [];
+  private net?: RealtimeService;
+  private remotes = new Map<string, RemotePlayer>();
   private wanderers: Array<{
     sprite: Phaser.GameObjects.Sprite;
     points: Array<{ x: number; y: number }>;
@@ -135,8 +156,123 @@ export class WorldScene extends Phaser.Scene {
       window.removeEventListener("keydown", this.onKeyDown);
       window.removeEventListener("keyup", this.onKeyUp);
       this.pressed.clear();
+      this.net?.destroy();
+      this.net = undefined;
+      this.remotes.forEach((r) => this.destroyRemote(r));
+      this.remotes.clear();
       emitGame("door:near", null);
     });
+
+    this.connectRealtime();
+  }
+
+  // --- realtime multiplayer (Phase 3) --------------------------------------
+
+  private connectRealtime(): void {
+    const identity = this.registry.get("netIdentity") as PlayerIdentity | undefined;
+    if (!identity || !isSupabaseConfigured) return;
+
+    try {
+      const supabase = createSupabaseClient();
+      this.net = new RealtimeService(supabase, identity, {
+        onPlayers: (players) => this.syncRemotePlayers(players),
+        onPosition: (event) => this.onRemotePosition(event),
+      });
+      void this.net.connect();
+    } catch {
+      // networking is best-effort — the world works without it
+    }
+  }
+
+  private syncRemotePlayers(players: Array<{ key: string; username: string; char: string; guest: boolean }>): void {
+    const seen = new Set(players.map((p) => p.key));
+    for (const p of players) {
+      const existing = this.remotes.get(p.key);
+      if (existing) continue;
+      this.spawnRemote(p.key, p.username, p.char, p.guest);
+    }
+    for (const [key, remote] of this.remotes) {
+      if (!seen.has(key)) {
+        this.tweens.add({
+          targets: [remote.sprite, remote.label, remote.shadow],
+          alpha: 0,
+          duration: 400,
+          onComplete: () => this.destroyRemote(remote),
+        });
+        this.remotes.delete(key);
+      }
+    }
+  }
+
+  private spawnRemote(key: string, username: string, char: string, guest: boolean): void {
+    const x = SPAWN.x * TILE + (this.remotes.size - 1) * 20;
+    const y = SPAWN.y * TILE;
+    const sprite = this.add
+      .sprite(x, y, `char-${char}`)
+      .setOrigin(0.5, 0.9)
+      .setScale(2)
+      .setDepth(49)
+      .setFrame(idleFrame(0))
+      .setAlpha(0);
+    const shadow = this.makeShadow(x, y + 4, 48).setAlpha(0);
+    const label = this.add
+      .text(x, y - 40, username + (guest ? " (guest)" : ""), {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: guest ? "#a1a1aa" : "#93c5fd",
+        backgroundColor: "#18181bcc",
+        padding: { x: 2, y: 1 },
+        resolution: 3,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(50)
+      .setAlpha(0);
+    this.tweens.add({ targets: [sprite, label, shadow], alpha: 1, duration: 300 });
+
+    this.remotes.set(key, {
+      key, username, char, guest,
+      sprite, shadow, label,
+      targetX: x, targetY: y, dir: 0, moving: false,
+      lastSeen: this.time.now,
+    });
+  }
+
+  private onRemotePosition(event: PositionEvent): void {
+    const remote = this.remotes.get(event.key);
+    if (!remote) return; // position for someone presence hasn't introduced yet
+    remote.targetX = event.x;
+    remote.targetY = event.y;
+    remote.dir = event.dir;
+    remote.moving = event.moving;
+    remote.lastSeen = this.time.now;
+  }
+
+  private destroyRemote(remote: RemotePlayer): void {
+    remote.sprite.destroy();
+    remote.shadow.destroy();
+    remote.label.destroy();
+  }
+
+  /** Interpolate remote characters toward their latest broadcast position. */
+  private updateRemotes(delta: number): void {
+    const lerp = Math.min(1, (delta / 1000) * 8);
+    for (const remote of this.remotes.values()) {
+      const dx = remote.targetX - remote.sprite.x;
+      const dy = remote.targetY - remote.sprite.y;
+      remote.sprite.x += dx * lerp;
+      remote.sprite.y += dy * lerp;
+
+      const animKey = `char-${remote.char}-${CHAR_DIRS[remote.dir]}`;
+      if (remote.moving && remote.sprite.anims.currentAnim?.key !== animKey) {
+        remote.sprite.anims.play(animKey);
+      } else if (!remote.moving && remote.sprite.anims.isPlaying) {
+        remote.sprite.anims.stop();
+        remote.sprite.setFrame(idleFrame(remote.dir));
+      }
+
+      remote.shadow.setPosition(remote.sprite.x, remote.sprite.y + 4);
+      remote.label.setPosition(remote.sprite.x, remote.sprite.y - 40);
+    }
   }
 
   update(time: number, delta: number): void {
@@ -172,6 +308,19 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.updateWanderers(time, delta);
+    this.updateRemotes(delta);
+
+    // broadcast our own movement (throttled inside the service)
+    if (this.net && this.player?.active) {
+      const moving = (this.player.body?.velocity.lengthSq() ?? 0) > 1;
+      this.net.sendPosition(
+        Math.round(this.player.x),
+        Math.round(this.player.y),
+        this.currentDir,
+        moving,
+        time,
+      );
+    }
   }
 
   // --- world construction -------------------------------------------------

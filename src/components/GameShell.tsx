@@ -16,9 +16,13 @@ const STATE_BADGE: Record<string, string> = {
 export default function GameShell({
   playerName = "Guest Builder",
   activity = "exploring the prototype",
+  userId = null,
+  char = "builder",
 }: {
   playerName?: string;
   activity?: string;
+  userId?: string | null;
+  char?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -28,14 +32,26 @@ export default function GameShell({
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const game = createGame(containerRef.current, { playerName });
+    // stable per-tab guest key so a guest keeps their identity across reloads
+    let netKey = userId ?? null;
+    if (!netKey) {
+      netKey = sessionStorage.getItem("knock-guest-key");
+      if (!netKey) {
+        netKey = "guest_" + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem("knock-guest-key", netKey);
+      }
+    }
+    const game = createGame(containerRef.current, {
+      playerName,
+      netIdentity: { key: netKey, username: playerName, char, guest: !userId },
+    });
     gameRef.current = game;
     (window as unknown as { __KNOCK_GAME?: Phaser.Game }).__KNOCK_GAME = game;
     return () => {
       game.destroy(true);
       gameRef.current = null;
     };
-  }, [playerName]);
+  }, [playerName, char, userId]);
 
   useEffect(() => {
     const offs = [
