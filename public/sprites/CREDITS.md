@@ -39,3 +39,9 @@ extracted DawnLike Player cells (2 walk frames × 4 directions per character).
 `props/treeA.png`, `props/treeB.png` and `props/bench.png` are original KNOCK
 pixel art. Door-state lights, nameplates, terrain auto-painting, and UI are
 original KNOCK code.
+
+## LPC Plant Repack
+- Authors: pennomi, laetissima, C.Nilsson, Sharm, Johann C, Reemax (LPC)
+- Source: https://opengameart.org/content/lpc-plant-repack
+- License: CC-BY-SA 3.0 / GPL 3.0
+- Usage: bushes, flowers and plants in props/ (bush*, flowers*, plant*)
