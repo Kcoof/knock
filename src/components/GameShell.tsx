@@ -11,6 +11,7 @@ import type { WorldRoom } from "@/lib/rooms";
 import type { PendingKnock } from "@/lib/knocks";
 import type { DoorNote } from "@/lib/notes";
 import { fetchRepoSnapshot } from "@/lib/github";
+import WorldMap from "@/components/WorldMap";
 
 const STATE_BADGE: Record<string, string> = {
   open: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
@@ -23,6 +24,7 @@ export default function GameShell({
   activity = "exploring the prototype",
   userId = null,
   char = "builder",
+  hub = "india",
   worldRooms = [],
   myRoom = null,
   pendingKnocks = [],
@@ -32,6 +34,7 @@ export default function GameShell({
   activity?: string;
   userId?: string | null;
   char?: string;
+  hub?: string;
   worldRooms?: WorldRoom[];
   myRoom?: WorldRoom | null;
   pendingKnocks?: PendingKnock[];
@@ -46,6 +49,8 @@ export default function GameShell({
   const [notes, setNotes] = useState<DoorNote[]>(doorNotes);
   const [room, setRoom] = useState<{ ownerName: string; roomId: string; githubUsername: string | null; githubRepo: string | null } | null>(null);
   const [repoSnap, setRepoSnap] = useState<ReturnType<typeof fetchRepoSnapshot> extends Promise<infer T> ? T : never>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [nearPortal, setNearPortal] = useState(false);
   const [invite, setInvite] = useState<{ ownerName: string; ownerKey: string } | null>(null);
   const [chat, setChat] = useState<Array<{ username: string; content: string; at: number }>>([]);
 
@@ -65,6 +70,8 @@ export default function GameShell({
       netIdentity: { key: netKey, username: playerName, char, guest: !userId },
       worldRooms,
       myRoomId: myRoom?.roomId ?? null,
+      roomTheme: myRoom?.theme ?? "warm",
+      hub,
     });
     gameRef.current = game;
     (window as unknown as { __KNOCK_GAME?: Phaser.Game }).__KNOCK_GAME = game;
@@ -72,15 +79,24 @@ export default function GameShell({
       game.destroy(true);
       gameRef.current = null;
     };
-  }, [playerName, char, userId, worldRooms, myRoom]);
+  }, [playerName, char, userId, worldRooms, myRoom, hub]);
+
+  const bumpPassport = (key: string) => {
+    try {
+      localStorage.setItem(key, String(Number(localStorage.getItem(key) ?? 0) + 1));
+    } catch {}
+  };
 
   useEffect(() => {
     const offs = [
       onGame("door:near", (door) => setNearDoor(door)),
       onGame("knock:open", (door) => setDialog(door)),
       onGame("toast", (text) => setToast(text)),
-      onGame("room:entered", (r) => { setRoom(r); setRepoSnap(null); }),
+      onGame("room:entered", (r) => { setRoom(r); setRepoSnap(null); bumpPassport("knock-passport-rooms"); try { localStorage.setItem("knock-passport-visited", JSON.stringify([...new Set([...(JSON.parse(localStorage.getItem("knock-passport-visited") ?? "[]") as string[]), hub])])); } catch {} }),
       onGame("come:invite", (payload) => setInvite(payload)),
+      onGame("worldmap:open", () => setMapOpen(true)),
+      onGame("worldmap:close", () => setMapOpen(false)),
+      onGame("portal:near", (near) => setNearPortal(near)),
       onGame("room:exited", () => setRoom(null)),
       onGame("chat:message", (message) =>
         setChat((current) => [...current.slice(-49), message]),
@@ -100,6 +116,7 @@ export default function GameShell({
       }),
     ];
     return () => offs.forEach((off) => off());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hub is stable per page load
   }, []);
 
   useEffect(() => {
@@ -131,9 +148,12 @@ export default function GameShell({
     emitGame("dialog:closed");
   };
 
+
+
   const sendKnock = (reason: string, message: string) => {
     if (!dialog) return;
     emitGame("knock:send", { doorId: dialog.id, reason, message });
+    bumpPassport("knock-passport-knocks");
     closeDialog();
   };
 
@@ -228,6 +248,21 @@ export default function GameShell({
         </div>
       )}
 
+      {/* world portal prompt + map overlay (V2) */}
+      {nearPortal && !mapOpen && !room && (
+        <button
+          type="button"
+          onClick={() => emitGame("worldmap:open")}
+          className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-violet-500/60 bg-zinc-900/90 px-4 py-3 text-center shadow-xl backdrop-blur-sm hover:border-violet-400"
+        >
+          <p className="font-pixel text-[9px] text-violet-200">WORLD PORTAL</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            press <kbd className="rounded border border-zinc-600 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px]">E</kbd> or click to travel
+          </p>
+        </button>
+      )}
+      {mapOpen && <WorldMap currentHub={hub} />}
+
       {/* room chat while inside a room */}
       {room && <ChatPanel ownerName={room.ownerName} roomId={room.roomId} messages={chat} playerName={playerName} onSend={sendChat} />}
 
@@ -308,6 +343,7 @@ function PlayerPanel({
   const [theme, setTheme] = useState<string>(myRoom.theme || "warm");
   const [ghUser, setGhUser] = useState<string>(myRoom.githubUsername ?? "");
   const [ghRepo, setGhRepo] = useState<string>(myRoom.githubRepo ?? "");
+  const [isPublic, setIsPublic] = useState<boolean>(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -336,7 +372,7 @@ function PlayerPanel({
       if (profileErr) throw profileErr;
       const { error: roomErr } = await supabase
         .from("rooms")
-        .update({ door_state: doorState, theme })
+        .update({ door_state: doorState, theme, visibility: isPublic ? "public" : "friends" })
         .eq("id", myRoom.roomId);
       if (roomErr) throw roomErr;
 
@@ -446,6 +482,16 @@ function PlayerPanel({
           className="w-1/2 rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
         />
       </div>
+
+      <label className="mt-3 flex items-center gap-2 text-xs text-zinc-300">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => setIsPublic(e.target.checked)}
+          className="h-3.5 w-3.5 accent-emerald-500"
+        />
+        List my room publicly on the world map
+      </label>
 
       <button
         type="button"

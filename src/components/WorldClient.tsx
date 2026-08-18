@@ -22,6 +22,7 @@ export default function WorldClient({
   activity,
   userId,
   char,
+  hub,
   worldRooms,
   myRoom,
   pendingKnocks,
@@ -31,6 +32,7 @@ export default function WorldClient({
   activity: string;
   userId: string | null;
   char: string;
+  hub: string;
   worldRooms: WorldRoom[];
   myRoom: WorldRoom | null;
   pendingKnocks: PendingKnock[];
@@ -42,6 +44,7 @@ export default function WorldClient({
       activity={activity}
       userId={userId}
       char={char}
+      hub={hub}
       worldRooms={worldRooms}
       myRoom={myRoom}
       pendingKnocks={pendingKnocks}

@@ -43,3 +43,18 @@ export const TOWN_TILES = [
   19, 43, 44, 52, 53, 63, 64, 65, 72, 73, 77, 85, 87, 88, 89, 91,
   92, 93, 94, 96, 99, 103, 104, 106, 108, 109, 111, 120, 121, 126, 130, 131,
 ] as const;
+
+/** V2 country hubs (spec §40) — start with a small test set. */
+export const HUBS = {
+  india: { name: "India Hub", ground: "grass", accent: "#22c55e" },
+  sa: { name: "Saudi Arabia Hub", ground: "sand", accent: "#eab308" },
+  japan: { name: "Japan Hub", ground: "light", accent: "#f472b6" },
+  us: { name: "United States Hub", ground: "snow", accent: "#60a5fa" },
+} as const;
+
+export type HubId = keyof typeof HUBS;
+
+export function normalizeHub(value: string | null | undefined): HubId {
+  return value && value in HUBS ? (value as HubId) : "india";
+}
+
