@@ -89,8 +89,7 @@ export default async function Home() {
       </div>
 
       <footer className="max-w-md text-balance text-[10px] leading-relaxed text-zinc-600 sm:text-[11px]">
-        Phase 2 — authentication & database foundation · realtime arrives in
-        Phase 3
+        MVP complete — rooms, knocks, chat & realtime · built by a two-agent team
       </footer>
       </div>
     </main>
