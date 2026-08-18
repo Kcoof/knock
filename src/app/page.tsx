@@ -22,6 +22,21 @@ export default async function Home() {
 
       <div className="flex w-full max-w-3xl flex-col items-center gap-8 sm:gap-10">
       <div className="space-y-5 sm:space-y-6">
+        {/* pixel-art hero scene from the actual game assets */}
+        <div className="relative mx-auto w-fit">
+          {/* eslint-disable-next-line @next/next/no-img-element -- pixel art needs crisp nearest-neighbor scaling */}
+          <img
+            src="/sprites/hero/door-hero.png"
+            alt="A pixel-art builder standing at a door"
+            width={320}
+            height={256}
+            style={{ imageRendering: "pixelated" }}
+            className="h-44 w-auto opacity-90 drop-shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 hover:scale-[1.03] sm:h-56"
+          />
+          <span className="absolute right-1 top-1 rounded-full border border-emerald-400/50 bg-zinc-950/80 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-emerald-300">
+            open
+          </span>
+        </div>
         <p className="font-pixel text-[9px] tracking-[0.2em] text-emerald-400 sm:text-[10px] sm:tracking-[0.3em]">
           A MULTIPLAYER PIXEL WORLD FOR BUILDERS
         </p>
