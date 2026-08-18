@@ -17,6 +17,7 @@ export interface CreateGameOptions {
   }>;
   myRoomId?: string | null;
   roomTheme?: string;
+  hub?: string;
 }
 
 /** Creates the Phaser game bound to a parent element. Client-side only. */
@@ -53,5 +54,6 @@ export function createGame(parent: HTMLElement, options: CreateGameOptions = {})
   game.registry.set("worldRooms", options.worldRooms ?? []);
   game.registry.set("myRoomId", options.myRoomId ?? null);
   if (options.roomTheme) game.registry.set("roomTheme", options.roomTheme);
+  if (options.hub) game.registry.set("hub", options.hub);
   return game;
 }

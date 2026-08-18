@@ -71,6 +71,8 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | 4 | `feature/rooms` | Real rooms & doors: world slots filled from the database, live door-state updates (DB + realtime), player status/activity panel |
 | 5 | `feature/knock` | Knock end-to-end: persisted knocks, live delivery to the owner, Let In / Not Now, result back to the visitor, pending knocks on load |
 | 6 | `feature/chat-notes` | MVP complete: room interiors you walk into, room chat (live + history), door notes for offline owners |
+| 7 | `feature/v15` | V1.5: character picker, room themes, GitHub context in rooms, Come Here invites |
+| 8 | `feature/v2-world` | V2: KNOCK World — 4 country hubs with biomes, world portal + map with live counts, public room directory, passport |
 
 ## Asset licenses
 

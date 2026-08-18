@@ -77,6 +77,9 @@ export interface GameEvents {
   "come:invite": (payload: ComeInvitePayload) => void;
   "come:accept": () => void;
   "come:send": () => void;
+  "portal:near": (near: boolean) => void;
+  "worldmap:open": () => void;
+  "worldmap:close": () => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }

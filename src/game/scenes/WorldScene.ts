@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import {
   DOOR_INTERACT_DISTANCE,
+  HUBS,
+  normalizeHub,
   DOOR_STATE_COLORS,
   MAP_H,
   MAP_W,
@@ -137,6 +139,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createWorld(): void {
+    // V2 hub: biome ground, per-hub channel, hub banner, travel portal
+    const hub = normalizeHub(this.registry.get("hub") as string | undefined);
+    this.biome = WorldScene.BIOME[HUBS[hub].ground] ?? WorldScene.BIOME.grass;
+
     this.doors = [];
     this.nearDoor = null;
     this.dialogOpen = false;
@@ -150,6 +156,23 @@ export class WorldScene extends Phaser.Scene {
     this.buildGardens(solids);
     this.buildProps(solids);
     this.buildLamps(solids);
+
+    // hub banner (top center, small)
+    this.add
+      .text(MAP_W * TILE / 2, 6, HUBS[hub].name.toUpperCase(), {
+        fontFamily: "monospace",
+        fontSize: "10px",
+        color: HUBS[hub].accent,
+        backgroundColor: "#18181bcc",
+        padding: { x: 6, y: 3 },
+        resolution: 3,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(70)
+      .setScrollFactor(0);
+
+    this.buildPortal();
+
     this.buildNpcs();
     this.buildPlayer(solids);
 
@@ -235,7 +258,9 @@ export class WorldScene extends Phaser.Scene {
 
     try {
       const supabase = createSupabaseClient();
-      this.net = new RealtimeService(supabase, identity, "knock:world", {
+      const hub = normalizeHub(this.registry.get("hub") as string | undefined);
+      const channelName = "knock:hub:" + hub;
+      this.net = new RealtimeService(supabase, identity, channelName, {
         onPlayers: (players) => this.syncRemotePlayers(players),
         onPosition: (event) => this.onRemotePosition(event),
         onRoomState: (event) => this.applyRoomUpdate(event),
@@ -397,6 +422,14 @@ export class WorldScene extends Phaser.Scene {
       }
 
       this.updateNearDoor();
+      if (this.portalPos) {
+        const nearPortal =
+          Phaser.Math.Distance.Between(this.player.x, this.player.y, this.portalPos.x, this.portalPos.y) < 70;
+        if (nearPortal !== this.wasNearPortal) {
+          this.wasNearPortal = nearPortal;
+          emitGame("portal:near", nearPortal);
+        }
+      }
     }
 
     this.updateWanderers(time, delta);
@@ -451,6 +484,15 @@ export class WorldScene extends Phaser.Scene {
     return a === b ? a : diag;
   }
 
+  /** Ground texture key sets per hub biome (V2 world). */
+  private static readonly BIOME: Record<string, { pure: string; path: string; water: string }> = {
+    grass: { pure: "lpc_g", path: "gd", water: "gw" },
+    sand: { pure: "lpc_sand", path: "sd", water: "sw" },
+    light: { pure: "lpc_light", path: "ld", water: "lw" },
+    snow: { pure: "lpc_snow", path: "nd", water: "nw" },
+  };
+
+  private biome = WorldScene.BIOME.grass;
   private terrainTexture(tx: number, ty: number): string {
     const base = this.terrainAt(tx, ty);
     const up = this.cellTerrain(tx, ty - 1);
@@ -465,17 +507,24 @@ export class WorldScene extends Phaser.Scene {
     ];
     const foreign = corners.find((c) => c !== base);
     if (!foreign) {
+      if (base !== "d" && base !== "w") {
+        // biome ground (grass / sand / light / snow) with variants
+        const h = Math.abs(((tx * 73856093) ^ (ty * 19349663)) % 100);
+        const variant = h < 55 ? "" : h < 80 ? "_v1" : "_v2";
+        const key = `lpc_${this.biome.pure.replace("lpc_", "")}${variant}`;
+        return this.textures.exists(`lpc_${key}`) ? `lpc_${key}` : this.biome.pure;
+      }
       const h = Math.abs(((tx * 73856093) ^ (ty * 19349663)) % 100);
       const variant = h < 55 ? "" : h < 80 ? "_v1" : "_v2";
       const key = `lpc_${base}${variant}`;
       return this.textures.exists(key) ? key : `lpc_${base}`;
     }
-    const prefix = foreign === "d" ? "gd" : "gw";
+    const prefix = foreign === "d" ? this.biome.path : this.biome.water;
     const bits = corners.map((c) => (c === foreign ? "1" : "0")).join("");
     const h = Math.abs(((tx * 83492791) ^ (ty * 2971215073)) % 100);
     const variant = h < 45 ? "" : h < 75 ? "_v1" : "_v2";
     const key = `lpc_${prefix}_${bits}${variant}`;
-    return this.textures.exists(key) ? `lpc_${prefix}_${bits}` : `lpc_${base}`;
+    return this.textures.exists(key) ? `lpc_${prefix}_${bits}` : this.biome.pure;
   }
 
   private buildGround(): void {
@@ -799,6 +848,38 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** World portal: walk up and press E to open the world map (V2 travel). */
+  private buildPortal(): void {
+    const px = 36.5 * TILE;
+    const py = 19.5 * TILE;
+    const ring1 = this.add.ellipse(px, py, 44, 60, 0x7c3aed, 0.35).setDepth(49);
+    const ring2 = this.add.ellipse(px, py, 26, 38, 0xa78bfa, 0.5).setDepth(49);
+    this.add
+      .text(px, py - 52, "WORLD PORTAL", {
+        fontFamily: "monospace",
+        fontSize: "8px",
+        color: "#ddd6fe",
+        backgroundColor: "#18181bcc",
+        padding: { x: 4, y: 2 },
+        resolution: 3,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(50);
+    this.tweens.add({
+      targets: [ring1, ring2],
+      scaleX: { from: 0.85, to: 1.1 },
+      scaleY: { from: 1.1, to: 0.9 },
+      duration: 1400,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.InOut",
+    });
+    this.portalPos = { x: px, y: py };
+  }
+
+  private wasNearPortal = false;
+  private portalPos: { x: number; y: number } | null = null;
+
   private makeShadow(x: number, y: number, depth: number) {
     return this.add.ellipse(x, y, 24, 10, 0x000000, 0.25).setDepth(depth);
   }
@@ -925,7 +1006,15 @@ export class WorldScene extends Phaser.Scene {
   // --- interaction --------------------------------------------------------
 
   private tryOpenKnockDialog(): void {
-    if (this.dialogOpen || !this.nearDoor) return;
+    if (this.dialogOpen) return;
+    if (this.portalPos && this.player) {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.portalPos.x, this.portalPos.y);
+      if (d < 70) {
+        emitGame("worldmap:open");
+        return;
+      }
+    }
+    if (!this.nearDoor) return;
     const door = this.nearDoor;
 
     // Real doors: open doors and owner's own door go straight inside
