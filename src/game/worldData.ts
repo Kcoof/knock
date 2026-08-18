@@ -207,29 +207,32 @@ export const PATHS: Array<{ x: number; y: number; w: number; h: number }> = [
 ];
 
 /** Trees: top-left tile of a 2x3 stamp (canopy 2x2 + trunk row). */
-export const TREES: Array<{ x: number; y: number; variant: "A" | "B" }> = [
+export type TreeVariant = "A" | "B" | "C" | "D" | "pale" | "autumn";
+
+/** Trees: top-left tile of the 2x3 trunk slot; LPC art renders ~4 tiles tall. */
+export const TREES: Array<{ x: number; y: number; variant: TreeVariant }> = [
   { x: 1, y: 3, variant: "A" },
-  { x: 1, y: 7, variant: "B" },
+  { x: 1, y: 7, variant: "D" },
   { x: 11, y: 3, variant: "B" },
-  { x: 13, y: 6, variant: "A" },
+  { x: 13, y: 6, variant: "autumn" },
   { x: 17, y: 5, variant: "A" },
-  { x: 20, y: 3, variant: "B" },
-  { x: 22, y: 8, variant: "A" },
-  { x: 32, y: 4, variant: "A" },
-  { x: 37, y: 6, variant: "B" },
-  { x: 31, y: 6, variant: "A" },
-  { x: 30, y: 3, variant: "B" },
-  { x: 12, y: 19, variant: "A" },
-  { x: 12, y: 23, variant: "B" },
+  { x: 20, y: 3, variant: "C" },
+  { x: 22, y: 8, variant: "B" },
+  { x: 30, y: 3, variant: "D" },
+  { x: 31, y: 6, variant: "autumn" },
+  { x: 37, y: 6, variant: "A" },
+  { x: 32, y: 4, variant: "B" },
+  { x: 12, y: 19, variant: "C" },
+  { x: 12, y: 23, variant: "pale" },
   { x: 20, y: 21, variant: "A" },
-  { x: 24, y: 15, variant: "B" },
-  { x: 9, y: 27, variant: "A" },
-  { x: 13, y: 30, variant: "B" },
-  { x: 23, y: 26, variant: "A" },
-  { x: 25, y: 31, variant: "B" },
+  { x: 24, y: 15, variant: "D" },
+  { x: 9, y: 27, variant: "B" },
+  { x: 13, y: 30, variant: "pale" },
+  { x: 23, y: 26, variant: "autumn" },
+  { x: 25, y: 31, variant: "C" },
   { x: 37, y: 14, variant: "A" },
-  { x: 1, y: 17, variant: "B" },
-  { x: 1, y: 29, variant: "A" },
+  { x: 1, y: 17, variant: "pale" },
+  { x: 1, y: 29, variant: "autumn" },
 ];
 
 /** Flower gardens: rect is fenced with a gap; flowers scattered inside. */

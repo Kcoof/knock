@@ -648,6 +648,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private buildTrees(solids: Phaser.Physics.Arcade.StaticGroup): void {
+    const TREE_TEXTURES: Record<string, string> = {
+      A: "treeLpcA",
+      B: "treeLpcB",
+      C: "treeLpcC",
+      D: "treeLpcD",
+      pale: "treeLpcPale",
+      autumn: "treeLpcAutumn",
+    };
     for (const t of TREES) {
       const px = t.x * TILE;
       const py = t.y * TILE;
@@ -658,7 +666,7 @@ export class WorldScene extends Phaser.Scene {
       // LPC trees are 256px art rendered at 0.5 (128px ≈ 4 tiles) — lush,
       // like the reference; anchored so the trunk base sits on the tile slot
       const sprite = this.add
-        .image(px + TILE, py + 3 * TILE, t.variant === "A" ? "treeLpcA" : "treeLpcC")
+        .image(px + TILE, py + 3 * TILE, TREE_TEXTURES[t.variant] ?? "treeLpcA")
         .setOrigin(0.5, 1)
         .setScale(0.5)
         .setDepth(py + 3 * TILE);

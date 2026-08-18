@@ -32,7 +32,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image("treeA", "props/treeA.png");
     this.load.image("treeB", "props/treeB.png");
     this.load.image("treeLpcA", "props/treeLpcA.png");
+    this.load.image("treeLpcB", "props/treeLpcB.png");
     this.load.image("treeLpcC", "props/treeLpcC.png");
+    this.load.image("treeLpcD", "props/treeLpcD.png");
+    this.load.image("treeLpcPale", "props/treeLpcPale.png");
+    this.load.image("treeLpcAutumn", "props/treeLpcAutumn.png");
     this.load.image("bench", "props/bench.png");
   }
 
