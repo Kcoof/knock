@@ -46,6 +46,13 @@ export interface KnockRespondPayload {
 export interface RoomEnteredPayload {
   ownerName: string;
   roomId: string;
+  githubUsername: string | null;
+  githubRepo: string | null;
+}
+
+export interface ComeInvitePayload {
+  ownerName: string;
+  ownerKey: string;
 }
 
 export interface ChatMessagePayload {
@@ -67,6 +74,9 @@ export interface GameEvents {
   "chat:send": (content: string) => void;
   "chat:message": (message: ChatMessagePayload) => void;
   "chat:focus": (focused: boolean) => void;
+  "come:invite": (payload: ComeInvitePayload) => void;
+  "come:accept": () => void;
+  "come:send": () => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }

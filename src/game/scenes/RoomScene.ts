@@ -133,15 +133,30 @@ export class RoomScene extends Phaser.Scene {
     });
 
     this.connectRoom();
-    emitGame("room:entered", { ownerName: this.data_.ownerName, roomId: this.data_.roomId });
+    const rooms = (this.registry.get("worldRooms") ?? []) as Array<{ roomId: string; githubUsername: string | null; githubRepo: string | null }>;
+    const roomInfo = rooms.find((r) => r.roomId === this.data_.roomId);
+    emitGame("room:entered", {
+      ownerName: this.data_.ownerName,
+      roomId: this.data_.roomId,
+      githubUsername: roomInfo?.githubUsername ?? null,
+      githubRepo: roomInfo?.githubRepo ?? null,
+    });
   }
 
+  /** Floor tile sets per interior theme (V1.5 customization). */
+  private static readonly THEMES: Record<string, [string, string, string]> = {
+    warm: ["i0", "i1", "i2"],
+    cool: ["i9", "i10", "i11"],
+    mossy: ["i108", "i114", "i1"],
+  };
   private buildInterior(rt: Phaser.GameObjects.RenderTexture): void {
+    const theme = RoomScene.THEMES[(this.registry.get("roomTheme") as string) ?? "warm"] ?? RoomScene.THEMES.warm;
+
     // floor with subtle variation
     for (let ty = 1; ty < ROOM_H - 1; ty++) {
       for (let tx = 1; tx < ROOM_W - 1; tx++) {
         const variant = Math.abs(((tx * 73856093) ^ (ty * 19349663)) % 100);
-        rt.draw(variant < 70 ? "i0" : variant < 90 ? "i1" : "i2", tx * TILE, ty * TILE);
+        rt.draw(variant < 70 ? theme[0] : variant < 90 ? theme[1] : theme[2], tx * TILE, ty * TILE);
       }
     }
     // rug in the middle

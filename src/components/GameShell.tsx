@@ -10,6 +10,7 @@ import type { DoorInfo } from "@/game/types";
 import type { WorldRoom } from "@/lib/rooms";
 import type { PendingKnock } from "@/lib/knocks";
 import type { DoorNote } from "@/lib/notes";
+import { fetchRepoSnapshot } from "@/lib/github";
 
 const STATE_BADGE: Record<string, string> = {
   open: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
@@ -43,7 +44,9 @@ export default function GameShell({
   const [toast, setToast] = useState<string | null>(null);
   const [knocks, setKnocks] = useState<PendingKnock[]>(pendingKnocks);
   const [notes, setNotes] = useState<DoorNote[]>(doorNotes);
-  const [room, setRoom] = useState<{ ownerName: string; roomId: string } | null>(null);
+  const [room, setRoom] = useState<{ ownerName: string; roomId: string; githubUsername: string | null; githubRepo: string | null } | null>(null);
+  const [repoSnap, setRepoSnap] = useState<ReturnType<typeof fetchRepoSnapshot> extends Promise<infer T> ? T : never>(null);
+  const [invite, setInvite] = useState<{ ownerName: string; ownerKey: string } | null>(null);
   const [chat, setChat] = useState<Array<{ username: string; content: string; at: number }>>([]);
 
   useEffect(() => {
@@ -76,7 +79,8 @@ export default function GameShell({
       onGame("door:near", (door) => setNearDoor(door)),
       onGame("knock:open", (door) => setDialog(door)),
       onGame("toast", (text) => setToast(text)),
-      onGame("room:entered", (r) => setRoom(r)),
+      onGame("room:entered", (r) => { setRoom(r); setRepoSnap(null); }),
+      onGame("come:invite", (payload) => setInvite(payload)),
       onGame("room:exited", () => setRoom(null)),
       onGame("chat:message", (message) =>
         setChat((current) => [...current.slice(-49), message]),
@@ -103,6 +107,18 @@ export default function GameShell({
     const t = setTimeout(() => setToast(null), 3600);
     return () => clearTimeout(t);
   }, [toast]);
+  useEffect(() => {
+    if (!room?.githubUsername || !room.githubRepo) return;
+    let cancelled = false;
+    void fetchRepoSnapshot(room.githubUsername, room.githubRepo).then((snap) => {
+      if (!cancelled) setRepoSnap(snap);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [room]);
+
+
 
   const openDialogFromHud = () => {
     if (!nearDoor || dialog) return;
@@ -163,7 +179,53 @@ export default function GameShell({
 
       {/* signed-in room controls */}
       {userId && myRoom && (
-        <PlayerPanel playerName={playerName} initialActivity={activity} myRoom={myRoom} />
+        <PlayerPanel playerName={playerName} initialActivity={activity} myRoom={myRoom} char={char} />
+      )}
+
+      {/* owner's GitHub context inside their room (spec §14) */}
+      {room && repoSnap && (
+        <div className="absolute bottom-4 left-3 z-20 w-72 rounded-lg border border-zinc-700/80 bg-zinc-900/90 p-3 backdrop-blur-sm">
+          <p className="font-pixel text-[8px] text-blue-300">GITHUB</p>
+          <p className="mt-1 text-xs font-medium text-zinc-100">{repoSnap.repo}</p>
+          {repoSnap.latestCommitMessage ? (
+            <p className="mt-1 truncate text-[11px] text-zinc-400" title={repoSnap.latestCommitMessage}>
+              latest: {repoSnap.latestCommitMessage}
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-zinc-500">no public commits found</p>
+          )}
+          {repoSnap.latestCommitTime && (
+            <p className="mt-0.5 text-[10px] text-zinc-600">{repoSnap.latestCommitTime}</p>
+          )}
+        </div>
+      )}
+
+      {/* someone invited everyone to their room */}
+      {invite && !room && (
+        <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-amber-500/50 bg-zinc-900/95 px-4 py-3 shadow-xl backdrop-blur-sm">
+          <p className="text-sm text-zinc-100">
+            <span className="font-medium text-amber-300">{invite.ownerName}</span> is calling you over.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                emitGame("come:accept");
+                setInvite(null);
+              }}
+              className="rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-medium text-amber-950 hover:bg-amber-400"
+            >
+              Go to their door
+            </button>
+            <button
+              type="button"
+              onClick={() => setInvite(null)}
+              className="rounded-lg border border-zinc-600 px-4 py-1.5 text-xs text-zinc-300 hover:border-zinc-400"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
       )}
 
       {/* room chat while inside a room */}
@@ -230,18 +292,30 @@ function PlayerPanel({
   playerName,
   initialActivity,
   myRoom,
+  char,
 }: {
   playerName: string;
   initialActivity: string;
   myRoom: WorldRoom;
+  char: string;
 }) {
   const [status, setStatus] = useState<string>(myRoom.status);
   const [activityText, setActivityText] = useState(initialActivity);
   const [doorState, setDoorState] = useState<"open" | "knock" | "focus">(
     myRoom.doorState === "private" ? "knock" : myRoom.doorState,
   );
+  const [avatar, setAvatar] = useState<string>(char);
+  const [theme, setTheme] = useState<string>(myRoom.theme || "warm");
+  const [ghUser, setGhUser] = useState<string>(myRoom.githubUsername ?? "");
+  const [ghRepo, setGhRepo] = useState<string>(myRoom.githubRepo ?? "");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+
+  const inviteAll = () => {
+    emitGame("come:send");
+    setNote("Invite sent — watch for visitors");
+    setTimeout(() => setNote(null), 3000);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -251,12 +325,18 @@ function PlayerPanel({
       const cleanActivity = activityText.trim().slice(0, 60);
       const { error: profileErr } = await supabase
         .from("profiles")
-        .update({ status, activity_text: cleanActivity })
+        .update({
+          status,
+          activity_text: cleanActivity,
+          avatar,
+          github_username: ghUser.trim() || null,
+          github_repo: ghRepo.trim() || null,
+        })
         .eq("id", myRoom.ownerId);
       if (profileErr) throw profileErr;
       const { error: roomErr } = await supabase
         .from("rooms")
-        .update({ door_state: doorState })
+        .update({ door_state: doorState, theme })
         .eq("id", myRoom.roomId);
       if (roomErr) throw roomErr;
 
@@ -310,6 +390,70 @@ function PlayerPanel({
         placeholder="e.g. Authentication API"
         className="mt-1 w-full rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
       />
+
+      <label className="mt-2 block text-[10px] uppercase tracking-wide text-zinc-500">
+        Character
+      </label>
+      <div className="mt-1 flex gap-1">
+        {["builder", "noble", "mage", "traveler"].map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setAvatar(c)}
+            className={`flex-1 rounded px-1 py-1 text-[10px] capitalize transition-colors ${
+              avatar === c ? "bg-emerald-500 text-emerald-950" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <label className="mt-2 block text-[10px] uppercase tracking-wide text-zinc-500">
+        Room theme
+      </label>
+      <div className="mt-1 flex gap-1">
+        {["warm", "cool", "mossy"].map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTheme(t)}
+            className={`flex-1 rounded px-1 py-1 text-[10px] capitalize transition-colors ${
+              theme === t ? "bg-amber-500 text-amber-950" : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <label className="mt-2 block text-[10px] uppercase tracking-wide text-zinc-500">
+        GitHub (public repo)
+      </label>
+      <div className="mt-1 flex gap-1">
+        <input
+          value={ghUser}
+          onChange={(e) => setGhUser(e.target.value)}
+          maxLength={40}
+          placeholder="username"
+          className="w-1/2 rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+        />
+        <input
+          value={ghRepo}
+          onChange={(e) => setGhRepo(e.target.value)}
+          maxLength={60}
+          placeholder="repo"
+          className="w-1/2 rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={inviteAll}
+        className="mt-3 w-full rounded border border-amber-500/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/20"
+      >
+        Invite everyone: &quot;Come here&quot;
+      </button>
 
       <label className="mt-2 block text-[10px] uppercase tracking-wide text-zinc-500">
         Door
