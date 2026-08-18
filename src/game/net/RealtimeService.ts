@@ -54,11 +54,20 @@ interface PresenceState {
   dir?: number;
 }
 
+/** A chat message inside a room. */
+export interface ChatMessageEvent {
+  key: string;
+  username: string;
+  content: string;
+  at: number;
+}
+
 /**
- * Phase 3 networking: one realtime channel for the whole world.
+ * Phase 3 networking: realtime channels for the world and individual rooms.
  * Presence carries slow-changing identity (who is online); Broadcast carries
- * fast ephemeral movement. Nothing here is ever written to the database —
- * movement is throwaway state by design (spec §16).
+ * fast ephemeral movement and chat. Nothing here is ever written to the
+ * database — movement is throwaway state by design (spec §16); chat is
+ * persisted separately by the caller.
  */
 export class RealtimeService {
   private channel: ReturnType<SupabaseClient["channel"]> | null = null;
@@ -68,17 +77,19 @@ export class RealtimeService {
   constructor(
     private supabase: SupabaseClient,
     private identity: PlayerIdentity,
+    private channelName: string,
     private handlers: {
       onPlayers: (players: PresenceState[]) => void;
       onPosition: (event: PositionEvent) => void;
       onRoomState?: (event: RoomStateEvent) => void;
       onKnock?: (event: KnockEvent) => void;
       onKnockResult?: (event: KnockResultEvent) => void;
+      onChat?: (event: ChatMessageEvent) => void;
     },
   ) {}
 
   async connect(): Promise<void> {
-    this.channel = this.supabase.channel("knock:world", {
+    this.channel = this.supabase.channel(this.channelName, {
       config: {
         presence: { key: this.identity.key },
         broadcast: { self: false },
@@ -106,6 +117,10 @@ export class RealtimeService {
       })
       .on("broadcast", { event: "knock_result" }, ({ payload }) => {
         this.handlers.onKnockResult?.(payload as KnockResultEvent);
+      })
+      .on("broadcast", { event: "chat" }, ({ payload }) => {
+        const event = payload as ChatMessageEvent;
+        if (event.key !== this.identity.key) this.handlers.onChat?.(event);
       });
 
     await this.channel.subscribe(async (status) => {
@@ -159,6 +174,20 @@ export class RealtimeService {
       type: "broadcast",
       event: "knock_result",
       payload: event,
+    });
+  }
+
+  /** Send a chat message on this channel. */
+  sendChat(content: string): void {
+    void this.channel?.send({
+      type: "broadcast",
+      event: "chat",
+      payload: {
+        key: this.identity.key,
+        username: this.identity.username,
+        content,
+        at: Date.now(),
+      },
     });
   }
 
