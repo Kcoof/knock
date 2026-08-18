@@ -1,5 +1,12 @@
 # Sprite Credits
 
+## LPC Trees
+- Authors: compilation by bluecarrot16 — full list in `CREDITS-trees.txt`
+- Source: https://opengameart.org/content/lpc-trees
+- License: CC-BY-SA 3.0
+- Usage: `props/treeLpcA.png`, `props/treeLpcC.png` (single trees extracted
+  from the green sheet, rendered at 0.5 scale in-game).
+
 ## LPC Terrains
 - Authors: compilation by bluecarrot16 & Zabin, from works by Sharm, Daneeklu,
   Jetrel, ZaPaper and others — full list in `lpc/CREDITS-terrain.txt`
