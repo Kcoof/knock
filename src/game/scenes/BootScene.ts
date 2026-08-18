@@ -1,6 +1,9 @@
 import Phaser from "phaser";
 import { CHARACTERS, TOWN_TILES } from "../constants";
 
+/** Kenney Tiny Dungeon tiles scaled to 2x, used for room interiors. */
+const INTERIOR_TILES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 24, 25, 61, 63, 111, 120];
+
 /**
  * Loads art, registers character animations, then hands off to the world.
  * LPC transition tiles are loaded from a generated manifest in two phases.
@@ -15,6 +18,9 @@ export class BootScene extends Phaser.Scene {
     this.load.json("lpcManifest", "lpc/manifest.json");
     for (const index of TOWN_TILES) {
       this.load.image(`t${index}`, `town2x/tile_${String(index).padStart(4, "0")}.png`);
+    }
+    for (const index of INTERIOR_TILES) {
+      this.load.image(`i${index}`, `dungeon2x/tile_${String(index).padStart(4, "0")}.png`);
     }
     for (const char of CHARACTERS) {
       // 2 columns (walk frames) x 4 rows (down/left/right/up)

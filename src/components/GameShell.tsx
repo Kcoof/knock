@@ -9,6 +9,7 @@ import { DOOR_STATE_LABELS, KNOCK_REASONS } from "@/game/constants";
 import type { DoorInfo } from "@/game/types";
 import type { WorldRoom } from "@/lib/rooms";
 import type { PendingKnock } from "@/lib/knocks";
+import type { DoorNote } from "@/lib/notes";
 
 const STATE_BADGE: Record<string, string> = {
   open: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
@@ -24,6 +25,7 @@ export default function GameShell({
   worldRooms = [],
   myRoom = null,
   pendingKnocks = [],
+  doorNotes = [],
 }: {
   playerName?: string;
   activity?: string;
@@ -32,6 +34,7 @@ export default function GameShell({
   worldRooms?: WorldRoom[];
   myRoom?: WorldRoom | null;
   pendingKnocks?: PendingKnock[];
+  doorNotes?: DoorNote[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -39,6 +42,9 @@ export default function GameShell({
   const [dialog, setDialog] = useState<DoorInfo | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [knocks, setKnocks] = useState<PendingKnock[]>(pendingKnocks);
+  const [notes, setNotes] = useState<DoorNote[]>(doorNotes);
+  const [room, setRoom] = useState<{ ownerName: string; roomId: string } | null>(null);
+  const [chat, setChat] = useState<Array<{ username: string; content: string; at: number }>>([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -70,6 +76,11 @@ export default function GameShell({
       onGame("door:near", (door) => setNearDoor(door)),
       onGame("knock:open", (door) => setDialog(door)),
       onGame("toast", (text) => setToast(text)),
+      onGame("room:entered", (r) => setRoom(r)),
+      onGame("room:exited", () => setRoom(null)),
+      onGame("chat:message", (message) =>
+        setChat((current) => [...current.slice(-49), message]),
+      ),
       onGame("knock:incoming", (event) => {
         setKnocks((current) => [
           {
@@ -110,6 +121,31 @@ export default function GameShell({
     closeDialog();
   };
 
+  const sendChat = (content: string) => {
+    const clean = content.trim().slice(0, 200);
+    if (!clean) return;
+    emitGame("chat:send", clean);
+    setChat((current) => [
+      ...current.slice(-49),
+      { username: playerName, content: clean, at: Date.now() },
+    ]);
+    if (userId && room) {
+      void createClient()
+        .from("room_messages")
+        .insert({ room_id: room.roomId, author_id: userId, content: clean })
+        .then(({ error }) => {
+          if (error) console.warn("chat history not saved", error.message);
+        });
+    }
+  };
+
+  const dismissNote = (note: DoorNote) => {
+    setNotes((current) => current.filter((n) => n.id !== note.id));
+    void createClient()
+      .from("door_notes")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", note.id);
+  };
   return (
     <div className="fixed inset-0 overflow-hidden bg-zinc-950">
       <div ref={containerRef} className="absolute inset-0" data-testid="game-root" />
@@ -128,6 +164,14 @@ export default function GameShell({
       {/* signed-in room controls */}
       {userId && myRoom && (
         <PlayerPanel playerName={playerName} initialActivity={activity} myRoom={myRoom} />
+      )}
+
+      {/* room chat while inside a room */}
+      {room && <ChatPanel ownerName={room.ownerName} roomId={room.roomId} messages={chat} playerName={playerName} onSend={sendChat} />}
+
+      {/* notes left at my door while away */}
+      {userId && myRoom && notes.length > 0 && (
+        <DoorNoteCards notes={notes} onDismiss={dismissNote} />
       )}
 
       {/* knocks at my door — live and while-away */}
@@ -304,6 +348,94 @@ function PlayerPanel({
   );
 }
 
+function ChatPanel({
+  ownerName,
+  roomId,
+  messages,
+  playerName,
+  onSend,
+}: {
+  ownerName: string;
+  roomId: string;
+  messages: Array<{ username: string; content: string; at: number }>;
+  playerName: string;
+  onSend: (content: string) => void;
+}) {
+  const [text, setText] = useState("");
+  void roomId;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSend(text);
+    setText("");
+  };
+
+  return (
+    <div className="absolute bottom-4 right-3 z-20 flex h-72 w-80 flex-col rounded-lg border border-zinc-700/80 bg-zinc-900/90 backdrop-blur-sm">
+      <p className="border-b border-zinc-800 px-3 py-2 font-pixel text-[8px] text-emerald-300">
+        {ownerName.toUpperCase()}&apos;S ROOM — CHAT
+      </p>
+      <div className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2">
+        {messages.length === 0 && (
+          <p className="text-center text-[11px] text-zinc-500">Say hi — walk to the door below to leave (E)</p>
+        )}
+        {messages.map((m, i) => (
+          <p key={i} className="text-xs leading-relaxed">
+            <span className={m.username === playerName ? "text-emerald-300" : "text-blue-300"}>
+              {m.username}
+            </span>
+            <span className="text-zinc-500">: </span>
+            <span className="text-zinc-200">{m.content}</span>
+          </p>
+        ))}
+      </div>
+      <form onSubmit={submit} className="border-t border-zinc-800 p-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={() => emitGame("chat:focus", true)}
+          onBlur={() => emitGame("chat:focus", false)}
+          maxLength={200}
+          placeholder="Type a message…"
+          className="w-full rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+        />
+      </form>
+    </div>
+  );
+}
+
+function DoorNoteCards({
+  notes,
+  onDismiss,
+}: {
+  notes: DoorNote[];
+  onDismiss: (note: DoorNote) => void;
+}) {
+  return (
+    <div className="absolute bottom-16 left-1/2 z-20 w-80 -translate-x-1/2 space-y-2">
+      {notes.map((note) => (
+        <div
+          key={note.id}
+          className="rounded-lg border border-emerald-500/40 bg-zinc-900/95 p-4 shadow-xl backdrop-blur-sm"
+          role="note"
+        >
+          <p className="text-sm text-zinc-100">
+            <span className="font-medium text-emerald-300">{note.authorName}</span> stopped by.
+          </p>
+          <p className="mt-1 text-xs text-zinc-400">“{note.message}”</p>
+          <button
+            type="button"
+            onClick={() => onDismiss(note)}
+            className="mt-3 w-full rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-400"
+          >
+            Dismiss
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function KnockQueue({
   roomId,
   knocks,
@@ -377,6 +509,58 @@ function KnockQueue({
   );
 }
 
+function LeaveNoteSection({ door }: { door: DoorInfo }) {
+  const [note, setNote] = useState("");
+  const [sent, setSent] = useState(false);
+
+  const leave = async () => {
+    const clean = note.trim().slice(0, 200);
+    if (!clean) return;
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("sign in");
+      const { error } = await supabase.from("door_notes").insert({
+        room_id: door.roomId,
+        author_id: user.id,
+        message: clean,
+      });
+      if (error) throw error;
+      setSent(true);
+    } catch {
+      setSent(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3">
+      <p className="text-xs text-zinc-400">
+        {door.owner} is away — leave a note at their door instead?
+      </p>
+      {sent ? (
+        <p className="mt-2 text-xs text-emerald-300">Note left ✓ they&apos;ll see it next visit</p>
+      ) : (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={200}
+            placeholder="Check the login issue when you&apos;re back…"
+            className="flex-1 rounded border border-zinc-700 bg-zinc-800/60 px-2 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={leave}
+            className="rounded border border-zinc-600 px-3 py-1.5 text-xs text-zinc-200 hover:border-emerald-500"
+          >
+            Leave note
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KnockDialog({  door,
   onCancel,
   onSend,
@@ -446,6 +630,8 @@ function KnockDialog({  door,
           rows={2}
           className="mt-2 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
         />
+
+        {door.roomId && door.ownerOnline === false && <LeaveNoteSection door={door} />}
 
         <div className="mt-5 flex justify-end gap-2">
           <button

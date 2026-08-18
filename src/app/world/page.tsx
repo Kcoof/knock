@@ -2,6 +2,7 @@ import WorldClient from "@/components/WorldClient";
 import { getProfile } from "@/lib/supabase/server";
 import { getWorldRooms } from "@/lib/rooms";
 import { getPendingKnocks } from "@/lib/knocks";
+import { getDoorNotes } from "@/lib/notes";
 import type { CharacterKey } from "@/game/types";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function WorldPage() {
   // my room (may not be in the top-3 freshest slots shown in the world)
   const mine = profile ? rooms.find((r) => r.ownerId === profile.id) ?? null : null;
   const pendingKnocks = await getPendingKnocks(mine?.roomId ?? null);
+  const doorNotes = await getDoorNotes(mine?.roomId ?? null);
 
   return (
     <WorldClient
@@ -28,6 +30,7 @@ export default async function WorldPage() {
       worldRooms={rooms}
       myRoom={mine}
       pendingKnocks={pendingKnocks}
+      doorNotes={doorNotes}
     />
   );
 }

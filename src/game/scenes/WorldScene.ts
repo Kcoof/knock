@@ -56,6 +56,7 @@ interface DoorRuntime {
   nameplate: Phaser.GameObjects.Text;
   light: Phaser.GameObjects.Arc;
   roomId?: string;
+  ownerId?: string;
 }
 
 interface RoomUpdateEvent {
@@ -211,7 +212,7 @@ export class WorldScene extends Phaser.Scene {
 
     try {
       const supabase = createSupabaseClient();
-      this.net = new RealtimeService(supabase, identity, {
+      this.net = new RealtimeService(supabase, identity, "knock:world", {
         onPlayers: (players) => this.syncRemotePlayers(players),
         onPosition: (event) => this.onRemotePosition(event),
         onRoomState: (event) => this.applyRoomUpdate(event),
@@ -234,7 +235,10 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private onlineKeys = new Set<string>();
+
   private syncRemotePlayers(players: Array<{ key: string; username: string; char: string; guest: boolean }>): void {
+    this.onlineKeys = new Set(players.map((p) => p.key));
     const seen = new Set(players.map((p) => p.key));
     for (const p of players) {
       const existing = this.remotes.get(p.key);
@@ -606,11 +610,20 @@ export class WorldScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    const rooms = (this.registry.get("worldRooms") ?? []) as Array<{ roomId: string }>;
+    const rooms = (this.registry.get("worldRooms") ?? []) as Array<{ roomId: string; ownerId: string }>;
     const slot = PERSONAL_SLOTS.indexOf(b.id);
-    const roomId = slot !== -1 ? rooms[slot]?.roomId : undefined;
+    const room = slot !== -1 ? rooms[slot] : undefined;
 
-    this.doors.push({ info, building: b, x: pos.x, y: pos.y, nameplate: this.lastNameplate!, light, roomId });
+    this.doors.push({
+      info,
+      building: b,
+      x: pos.x,
+      y: pos.y,
+      nameplate: this.lastNameplate!,
+      light,
+      roomId: room?.roomId,
+      ownerId: room?.ownerId,
+    });
   }
 
   private lastNameplate?: Phaser.GameObjects.Text;
@@ -820,8 +833,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private buildPlayer(solids: Phaser.Physics.Arcade.StaticGroup): void {
-    const px = SPAWN.x * TILE;
-    const py = SPAWN.y * TILE;
+    const returnPos = this.registry.get("returnPos") as { x: number; y: number } | undefined;
+    this.registry.remove("returnPos");
+    const px = returnPos?.x ?? SPAWN.x * TILE;
+    const py = returnPos?.y ?? SPAWN.y * TILE;
     this.playerShadow = this.makeShadow(px, py + 4, 48);
     this.player = this.physics.add
       .sprite(px, py, `char-${PLAYER_CHAR as CharacterKey}`)
@@ -863,8 +878,70 @@ export class WorldScene extends Phaser.Scene {
 
   private tryOpenKnockDialog(): void {
     if (this.dialogOpen || !this.nearDoor) return;
+    const door = this.nearDoor;
+
+    // Real doors: open doors and owner's own door go straight inside
+    if (door.roomId) {
+      const myRoomId = this.registry.get("myRoomId");
+      if (door.roomId === myRoomId || door.info.state === "open") {
+        void this.enterRoom(door);
+        return;
+      }
+    }
+
     this.dialogOpen = true;
-    emitGame("knock:open", this.nearDoor.info);
+    emitGame("knock:open", door.info);
+  }
+
+  /** Rooms with knock-first doors check for an accepted knock before entry. */
+  private async enterRoom(door: DoorRuntime): Promise<void> {
+    if (this.dialogOpen) return;
+    const identity = this.registry.get("netIdentity") as
+      | { key: string; guest: boolean; username: string; char: string }
+      | undefined;
+
+    if (!identity || identity.guest) {
+      emitGame("toast", "Sign in to enter real rooms.");
+      return;
+    }
+    if (door.info.state === "focus" && door.roomId !== this.registry.get("myRoomId")) {
+      emitGame("toast", `${door.info.owner} is in focus mode — try again later.`);
+      return;
+    }
+    if (door.info.state === "knock" && door.roomId !== this.registry.get("myRoomId")) {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("knocks")
+          .select("id")
+          .eq("room_id", door.roomId)
+          .eq("visitor_id", identity.key)
+          .eq("status", "accepted")
+          .limit(1);
+        if (!data || data.length === 0) {
+          this.dialogOpen = true;
+          emitGame("knock:open", door.info);
+          return;
+        }
+      } catch {
+        this.dialogOpen = true;
+        emitGame("knock:open", door.info);
+        return;
+      }
+    }
+
+    this.dialogOpen = true;
+    this.cameras.main.fadeOut(250, 0, 0, 0);
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      this.registry.set("roomSceneData", {
+        roomId: door.roomId,
+        ownerName: door.info.owner,
+        exit: { x: Math.round(this.player.x), y: Math.round(this.player.y + TILE) },
+        identity,
+      });
+      this.scene.start("room");
+    });
   }
 
   private updateNearDoor(): void {
@@ -884,7 +961,14 @@ export class WorldScene extends Phaser.Scene {
     }
     if (best?.info.id !== this.nearDoor?.info.id) {
       this.nearDoor = best;
-      emitGame("door:near", best?.info ?? null);
+      const payload = best
+        ? {
+            ...best.info,
+            roomId: best.roomId,
+            ownerOnline: best.ownerId ? this.onlineKeys.has(best.ownerId) : undefined,
+          }
+        : null;
+      emitGame("door:near", payload);
     }
   }
 

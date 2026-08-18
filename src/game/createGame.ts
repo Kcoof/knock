@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
 import { WorldScene } from "./scenes/WorldScene";
+import { RoomScene } from "./scenes/RoomScene";
 import type { PlayerIdentity } from "./net/RealtimeService";
 
 export interface CreateGameOptions {
@@ -40,7 +41,7 @@ export function createGame(parent: HTMLElement, options: CreateGameOptions = {})
         debug: false,
       },
     },
-    scene: [BootScene, WorldScene],
+    scene: [BootScene, WorldScene, RoomScene],
   });
   if (options.playerName) {
     game.registry.set("playerName", options.playerName);

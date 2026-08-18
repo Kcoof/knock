@@ -34,4 +34,8 @@ export interface DoorInfo {
   activity: string;
   status: PresenceStatus;
   state: DoorState;
+  /** Real room id (database rooms); absent for mock doors. */
+  roomId?: string;
+  /** True when the owner is currently online in the world. */
+  ownerOnline?: boolean;
 }

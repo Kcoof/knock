@@ -43,6 +43,17 @@ export interface KnockRespondPayload {
   accepted: boolean;
 }
 
+export interface RoomEnteredPayload {
+  ownerName: string;
+  roomId: string;
+}
+
+export interface ChatMessagePayload {
+  username: string;
+  content: string;
+  at: number;
+}
+
 export interface GameEvents {
   "door:near": (door: DoorInfo | null) => void;
   "knock:open": (door: DoorInfo) => void;
@@ -51,6 +62,11 @@ export interface GameEvents {
   "room:update": (payload: RoomUpdatePayload) => void;
   "knock:incoming": (payload: IncomingKnockPayload) => void;
   "knock:respond": (payload: KnockRespondPayload) => void;
+  "room:entered": (payload: RoomEnteredPayload) => void;
+  "room:exited": (exit: { x: number; y: number }) => void;
+  "chat:send": (content: string) => void;
+  "chat:message": (message: ChatMessagePayload) => void;
+  "chat:focus": (focused: boolean) => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }
