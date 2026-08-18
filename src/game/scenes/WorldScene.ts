@@ -455,7 +455,7 @@ export class WorldScene extends Phaser.Scene {
 
     // bake bushes and flowers into the ground
     for (const d of DECOR) {
-      rt.draw(`t${d.tile}`, Math.floor(d.x * TILE), Math.floor(d.y * TILE));
+      rt.draw(d.key, Math.floor(d.x * TILE), Math.floor(d.y * TILE));
     }
   }
 
@@ -712,7 +712,7 @@ export class WorldScene extends Phaser.Scene {
   private buildProps(solids: Phaser.Physics.Arcade.StaticGroup): void {
     for (const prop of PROPS) {
       const sprite = this.add
-        .sprite(prop.x * TILE, prop.y * TILE, `t${prop.tile}`)
+        .sprite(prop.x * TILE, prop.y * TILE, typeof prop.tile === "number" ? `t${prop.tile}` : prop.tile)
         .setOrigin(0.5, 0.85)
         .setDepth(prop.y * TILE);
       if (prop.blocked) {
