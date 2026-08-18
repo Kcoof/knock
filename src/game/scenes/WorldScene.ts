@@ -653,13 +653,15 @@ export class WorldScene extends Phaser.Scene {
       const py = t.y * TILE;
       // soft ground shadow under the canopy, drawn before the tree
       this.add
-        .ellipse(px + 36, py + 80, 52, 18, 0x000000, 0.18)
+        .ellipse(px + 32, py + 96, 80, 22, 0x000000, 0.18)
         .setDepth(-7);
+      // LPC trees are 256px art rendered at 0.5 (128px ≈ 4 tiles) — lush,
+      // like the reference; anchored so the trunk base sits on the tile slot
       const sprite = this.add
-        .image(px, py, t.variant === "A" ? "treeA" : "treeB")
-        .setOrigin(0, 0)
-        .setScale(2)
-        .setDepth(py + 80); // trunk base sorts against the player
+        .image(px + TILE, py + 3 * TILE, t.variant === "A" ? "treeLpcA" : "treeLpcC")
+        .setOrigin(0.5, 1)
+        .setScale(0.5)
+        .setDepth(py + 3 * TILE);
       void sprite;
 
       // collision covers the trunk row only, so the canopy hangs overhead
