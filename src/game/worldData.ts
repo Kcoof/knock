@@ -265,7 +265,12 @@ export const BENCHES: Array<{ x: number; y: number }> = [
  * Ground props: tile index, tile position, and whether the player collides.
  * The well, barrels, crates and rocks make the world feel lived-in.
  */
-export const PROPS: Array<{ tile: number; x: number; y: number; blocked: boolean }> = [
+export const PROPS: Array<{
+  tile: number | string;
+  x: number;
+  y: number;
+  blocked: boolean;
+}> = [
   { tile: 131, x: 22.5, y: 19.4, blocked: true }, // well on the plaza edge
   { tile: 103, x: 13.6, y: 26.4, blocked: true }, // crate by Community Room
   { tile: 106, x: 14.7, y: 26.5, blocked: true }, // barrel
@@ -277,25 +282,78 @@ export const PROPS: Array<{ tile: number; x: number; y: number; blocked: boolean
   { tile: 93, x: 32.4, y: 18.6, blocked: false }, // sign near Library
   { tile: 104, x: 9.5, y: 22.5, blocked: true }, // chest by Community Room wall
   { tile: 92, x: 11.5, y: 16.5, blocked: true }, // rock on corridor
+  // Round bushes anchor mixed foliage clusters and block at their dense base.
+  { tile: "bushC", x: 10.5, y: 13.8, blocked: true }, // west garden front
+  { tile: "bushC", x: 20.5, y: 13.5, blocked: true }, // east garden front
+  { tile: "bushC", x: 22.5, y: 6.8, blocked: true }, // north trees
+  { tile: "bushC", x: 11.5, y: 31.5, blocked: true }, // south-west trees
+  { tile: "bushC", x: 25.5, y: 29.0, blocked: true }, // south trees
+  { tile: "bushC", x: 33.5, y: 25.8, blocked: true }, // pond north bank
+  { tile: "bushC", x: 37.0, y: 25.6, blocked: true }, // pond north bank
+  { tile: "bushC", x: 30.3, y: 30.0, blocked: true }, // pond west bank
+  { tile: "bushC", x: 1.0, y: 1.2, blocked: true }, // north-west corner
+  { tile: "bushC", x: 38.5, y: 1.5, blocked: true }, // north-east corner
+  { tile: "bushC", x: 1.2, y: 32.2, blocked: true }, // south-west corner
+  { tile: "bushC", x: 38.5, y: 33.0, blocked: true }, // south-east corner
 ];
 
-/** Non-blocking ground decorations (bushes, flowers) in tiles. */
-export const DECOR: Array<{ tile: number; x: number; y: number }> = [
-  { tile: 19, x: 11.5, y: 8.5 },
-  { tile: 19, x: 22.5, y: 12.0 },
-  { tile: 19, x: 30.5, y: 16.9 },
-  { tile: 19, x: 3.5, y: 14.5 },
-  { tile: 19, x: 37.5, y: 20.5 },
-  { tile: 19, x: 11.5, y: 28.5 },
-  { tile: 19, x: 27.5, y: 28.6 },
-  { tile: 43, x: 10.5, y: 12.6 },
-  { tile: 43, x: 15.5, y: 8.0 },
-  { tile: 43, x: 28.5, y: 14.5 },
-  { tile: 43, x: 8.5, y: 24.4 },
-  { tile: 43, x: 26.5, y: 22.5 },
-  { tile: 43, x: 35.5, y: 23.4 },
-  { tile: 43, x: 3.5, y: 33.5 },
-  { tile: 43, x: 15.5, y: 33.5 },
+/** Non-blocking foliage baked into the ground. */
+export const DECOR: Array<{ key: string; x: number; y: number }> = [
+  // The two garden fronts.
+  { key: "plantA", x: 9.3, y: 13.0 },
+  { key: "plantB", x: 11.2, y: 13.8 },
+  { key: "flowersB", x: 10.0, y: 14.5 },
+  { key: "plantA", x: 19.2, y: 12.5 },
+  { key: "plantB", x: 21.3, y: 13.5 },
+  { key: "flowersB", x: 22.1, y: 12.5 },
+
+  // Around tree trunks in the north and south groves.
+  { key: "plantA", x: 21.4, y: 6.8 },
+  { key: "plantB", x: 23.0, y: 7.6 },
+  { key: "flowersB", x: 22.1, y: 8.2 },
+  { key: "plantA", x: 10.3, y: 30.8 },
+  { key: "plantB", x: 12.2, y: 31.8 },
+  { key: "flowersB", x: 10.8, y: 32.5 },
+  { key: "plantA", x: 24.2, y: 28.7 },
+  { key: "plantB", x: 26.3, y: 29.6 },
+  { key: "flowersB", x: 25.0, y: 30.2 },
+
+  // Pond north and west banks.
+  { key: "plantA", x: 32.3, y: 25.1 },
+  { key: "plantB", x: 34.2, y: 26.0 },
+  { key: "flowersB", x: 33.0, y: 25.9 },
+  { key: "plantA", x: 36.0, y: 25.0 },
+  { key: "plantB", x: 38.0, y: 25.8 },
+  { key: "flowersB", x: 36.7, y: 25.9 },
+  { key: "plantA", x: 30.0, y: 28.5 },
+  { key: "plantB", x: 31.0, y: 30.6 },
+  { key: "flowersB", x: 30.2, y: 31.2 },
+
+  // Dense corner clusters frame the map edges.
+  { key: "plantA", x: 0.0, y: 0.2 },
+  { key: "plantB", x: 1.6, y: 1.2 },
+  { key: "flowersB", x: 0.4, y: 2.0 },
+  { key: "plantA", x: 37.2, y: 0.5 },
+  { key: "plantB", x: 39.0, y: 1.8 },
+  { key: "flowersB", x: 38.0, y: 2.3 },
+  { key: "plantA", x: 0.1, y: 31.2 },
+  { key: "plantB", x: 2.0, y: 32.0 },
+  { key: "flowersB", x: 0.5, y: 33.0 },
+  { key: "plantA", x: 37.0, y: 33.0 },
+  { key: "plantB", x: 39.0, y: 33.0 },
+  { key: "flowersB", x: 38.0, y: 33.0 },
+
+  // Small accents sit just off path edges.
+  { key: "flowersA", x: 2.5, y: 14.5 },
+  { key: "bushA", x: 4.5, y: 14.7 },
+  { key: "flowersA", x: 9.0, y: 18.3 },
+  { key: "bushA", x: 14.5, y: 18.5 },
+  { key: "flowersA", x: 24.5, y: 14.5 },
+  { key: "bushA", x: 29.5, y: 14.4 },
+  { key: "flowersA", x: 35.0, y: 18.5 },
+  { key: "bushA", x: 38.5, y: 16.5 },
+  { key: "flowersA", x: 14.5, y: 26.2 },
+  { key: "bushA", x: 22.5, y: 26.2 },
 ];
 
 export function doorWorldPos(b: BuildingSpec): { x: number; y: number } {
