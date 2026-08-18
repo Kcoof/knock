@@ -47,8 +47,8 @@ export default function AuthPanel() {
   };
 
   return (
-    <div className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900/70 p-5 text-left">
-      <div className="mb-4 flex gap-1 rounded-lg bg-zinc-800/70 p-1">
+    <div className="w-full max-w-sm rounded-2xl border border-zinc-800/80 bg-zinc-900/75 p-4 text-left shadow-2xl shadow-black/30 backdrop-blur-md sm:p-6">
+      <div className="mb-5 flex gap-1 rounded-xl border border-zinc-800 bg-zinc-950/60 p-1">
         {(["signin", "signup"] as const).map((m) => (
           <button
             key={m}
@@ -57,8 +57,8 @@ export default function AuthPanel() {
               setMode(m);
               setError(null);
             }}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === m ? "bg-emerald-500 text-emerald-950" : "text-zinc-400 hover:text-zinc-200"
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 ${
+              mode === m ? "bg-emerald-400 text-emerald-950 shadow-sm shadow-emerald-950/30" : "text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"
             }`}
           >
             {m === "signin" ? "Sign in" : "Create account"}
@@ -66,7 +66,7 @@ export default function AuthPanel() {
         ))}
       </div>
 
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="space-y-4">
         {mode === "signup" && (
           <label className="block">
             <span className="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">
@@ -77,7 +77,7 @@ export default function AuthPanel() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="pixel_builder"
               autoComplete="username"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/50 px-3.5 py-2.5 text-sm text-zinc-100 shadow-inner shadow-black/10 transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
             />
           </label>
         )}
@@ -93,7 +93,7 @@ export default function AuthPanel() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             autoComplete="email"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/50 px-3.5 py-2.5 text-sm text-zinc-100 shadow-inner shadow-black/10 transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
           />
         </label>
 
@@ -109,7 +109,7 @@ export default function AuthPanel() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-700/80 bg-zinc-950/50 px-3.5 py-2.5 text-sm text-zinc-100 shadow-inner shadow-black/10 transition-colors placeholder:text-zinc-600 hover:border-zinc-600 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
           />
         </label>
 
@@ -122,7 +122,7 @@ export default function AuthPanel() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-medium text-emerald-950 transition-colors hover:bg-emerald-400 disabled:opacity-50"
+          className="w-full rounded-xl bg-emerald-400 px-4 py-3 text-sm font-semibold text-emerald-950 shadow-lg shadow-emerald-950/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-300 hover:shadow-emerald-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:pointer-events-none disabled:opacity-50"
         >
           {busy ? "…" : mode === "signin" ? "Sign in" : "Create account & claim your room"}
         </button>
