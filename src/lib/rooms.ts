@@ -8,6 +8,9 @@ export interface WorldRoom {
   activity: string;
   status: string;
   doorState: "open" | "knock" | "focus" | "private";
+  theme: string;
+  githubUsername: string | null;
+  githubRepo: string | null;
 }
 
 /**
@@ -23,7 +26,7 @@ export async function getWorldRooms(limit = 3): Promise<WorldRoom[]> {
     const { data, error } = await supabase
       .from("rooms")
       .select(
-        "id, owner_id, door_state, profiles!rooms_owner_id_fkey(username, activity_text, status)",
+        "id, owner_id, door_state, theme, profiles!rooms_owner_id_fkey(username, activity_text, status, github_username, github_repo)",
       )
       .order("updated_at", { ascending: false })
       .limit(limit);
@@ -31,9 +34,21 @@ export async function getWorldRooms(limit = 3): Promise<WorldRoom[]> {
 
     return data.flatMap((room) => {
       const profile = room.profiles as
-        | { username: string; activity_text: string; status: string }
+        | {
+            username: string;
+            activity_text: string;
+            status: string;
+            github_username: string | null;
+            github_repo: string | null;
+          }
         | null
-        | { username: string; activity_text: string; status: string }[];
+        | {
+            username: string;
+            activity_text: string;
+            status: string;
+            github_username: string | null;
+            github_repo: string | null;
+          }[];
       if (!profile || Array.isArray(profile)) return [];
       return [
         {
@@ -43,6 +58,9 @@ export async function getWorldRooms(limit = 3): Promise<WorldRoom[]> {
           activity: profile.activity_text,
           status: profile.status,
           doorState: room.door_state,
+          theme: room.theme ?? "warm",
+          githubUsername: profile.github_username,
+          githubRepo: profile.github_repo,
         },
       ];
     });

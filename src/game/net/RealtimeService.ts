@@ -54,6 +54,13 @@ interface PresenceState {
   dir?: number;
 }
 
+/** An invitation to come visit someone's room. */
+export interface ComeHereEvent {
+  ownerKey: string;
+  ownerName: string;
+  roomId: string | null;
+}
+
 /** A chat message inside a room. */
 export interface ChatMessageEvent {
   key: string;
@@ -85,6 +92,7 @@ export class RealtimeService {
       onKnock?: (event: KnockEvent) => void;
       onKnockResult?: (event: KnockResultEvent) => void;
       onChat?: (event: ChatMessageEvent) => void;
+      onComeHere?: (event: ComeHereEvent) => void;
     },
   ) {}
 
@@ -117,6 +125,9 @@ export class RealtimeService {
       })
       .on("broadcast", { event: "knock_result" }, ({ payload }) => {
         this.handlers.onKnockResult?.(payload as KnockResultEvent);
+      })
+      .on("broadcast", { event: "come" }, ({ payload }) => {
+        this.handlers.onComeHere?.(payload as ComeHereEvent);
       })
       .on("broadcast", { event: "chat" }, ({ payload }) => {
         const event = payload as ChatMessageEvent;
@@ -175,6 +186,11 @@ export class RealtimeService {
       event: "knock_result",
       payload: event,
     });
+  }
+
+  /** Invite everyone online to come visit. */
+  sendComeHere(event: ComeHereEvent): void {
+    void this.channel?.send({ type: "broadcast", event: "come", payload: event });
   }
 
   /** Send a chat message on this channel. */

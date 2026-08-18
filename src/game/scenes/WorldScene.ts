@@ -97,6 +97,7 @@ export class WorldScene extends Phaser.Scene {
   private currentDir = 0; // 0 down, 1 left, 2 right, 3 up
   private unsubscribers: Array<() => void> = [];
   private net?: RealtimeService;
+  private activeInvite: { ownerName: string; ownerKey: string; roomId: string | null } | null = null;
   private remotes = new Map<string, RemotePlayer>();
   private wanderers: Array<{
     sprite: Phaser.GameObjects.Sprite;
@@ -169,6 +170,28 @@ export class WorldScene extends Phaser.Scene {
         // opened from the React HUD (click/tap path) — freeze movement
         this.dialogOpen = true;
       }),
+      onGame("come:send", () => {
+        const identity = this.registry.get("netIdentity") as { key: string; username: string } | undefined;
+        if (identity) {
+          this.net?.sendComeHere({
+            ownerKey: identity.key,
+            ownerName: identity.username,
+            roomId: (this.registry.get("myRoomId") as string | null) ?? null,
+          });
+        }
+      }),
+      onGame("come:accept", () => {
+        const invite = this.activeInvite;
+        this.activeInvite = null;
+        if (!invite) return;
+        const door = invite.roomId ? this.doors.find((d) => d.roomId === invite.roomId) : null;
+        if (door) {
+          this.player.setPosition(door.x, door.y + 40);
+          this.cameras.main.flash(200, 20, 60, 40);
+        } else {
+          emitGame("toast", invite.ownerName + String.fromCharCode(8217) + "s room is not in view right now.");
+        }
+      }),
       onGame("dialog:closed", () => {
         this.dialogOpen = false;
       }),
@@ -217,6 +240,21 @@ export class WorldScene extends Phaser.Scene {
         onPosition: (event) => this.onRemotePosition(event),
         onRoomState: (event) => this.applyRoomUpdate(event),
         onKnock: (event) => this.onIncomingKnock(event),
+        onComeHere: (event) => {
+          const identity = this.registry.get("netIdentity") as { key: string } | undefined;
+          if (!identity || event.ownerKey === identity.key) return;
+          const door = event.roomId ? this.doors.find((d) => d.roomId === event.roomId) : null;
+          if (door) {
+            const beacon = this.add.text(door.x, door.building.y * TILE - 40, "▼", {
+              fontFamily: "monospace", fontSize: "16px", color: "#fbbf24",
+              backgroundColor: "#18181be6", padding: { x: 3, y: 1 }, resolution: 3,
+            }).setOrigin(0.5, 1).setDepth(60);
+            this.tweens.add({ targets: beacon, y: beacon.y + 6, duration: 600, yoyo: true, repeat: 29 });
+            this.time.delayedCall(30000, () => beacon.destroy());
+          }
+          this.activeInvite = event;
+          emitGame("come:invite", { ownerName: event.ownerName, ownerKey: event.ownerKey });
+        },
         onKnockResult: (event) => {
           const identity = this.registry.get("netIdentity") as { key: string } | undefined;
           if (identity && event.visitorKey === identity.key) {
