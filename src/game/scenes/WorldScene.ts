@@ -34,6 +34,7 @@ import { RealtimeService } from "../net/RealtimeService";
 import type { PlayerIdentity, PositionEvent } from "../net/RealtimeService";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface RemotePlayer {
   key: string;
@@ -99,6 +100,9 @@ export class WorldScene extends Phaser.Scene {
   private currentDir = 0; // 0 down, 1 left, 2 right, 3 up
   private unsubscribers: Array<() => void> = [];
   private net?: RealtimeService;
+  private supabase?: ReturnType<typeof createSupabaseClient>;
+  private metaTimer?: Phaser.Time.TimerEvent;
+  private metaChannel?: (SupabaseClient["channel"] extends (...args: never[]) => infer R ? R : never);
   private activeInvite: { ownerName: string; ownerKey: string; roomId: string | null } | null = null;
   private remotes = new Map<string, RemotePlayer>();
   private wanderers: Array<{
@@ -193,6 +197,15 @@ export class WorldScene extends Phaser.Scene {
         // opened from the React HUD (click/tap path) — freeze movement
         this.dialogOpen = true;
       }),
+      onGame("friend:goknock", ({ roomId }) => {
+        const door = roomId ? this.doors.find((d) => d.roomId === roomId) : null;
+        if (door) {
+          this.player.setPosition(door.x, door.y + 40);
+          this.cameras.main.flash(200, 20, 60, 40);
+        } else {
+          emitGame("toast", "Their room is not on display in this hub right now.");
+        }
+      }),
       onGame("come:send", () => {
         const identity = this.registry.get("netIdentity") as { key: string; username: string } | undefined;
         if (identity) {
@@ -242,6 +255,8 @@ export class WorldScene extends Phaser.Scene {
       this.pressed.clear();
       this.net?.destroy();
       this.net = undefined;
+      this.metaTimer?.destroy();
+      if (this.metaChannel && this.supabase) void this.supabase.removeChannel(this.metaChannel);
       this.remotes.forEach((r) => this.destroyRemote(r));
       this.remotes.clear();
       emitGame("door:near", null);
@@ -293,6 +308,22 @@ export class WorldScene extends Phaser.Scene {
         },
       });
       void this.net.connect();
+      // meta pings: which hub every signed-in builder is in right now
+      const meta = supabase.channel("knock:hubs-meta");
+      meta.on("broadcast", { event: "here" }, () => {});
+      void meta.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          const ping = () =>
+            void meta.send({
+              type: "broadcast",
+              event: "here",
+              payload: { hub, userKey: identity.key, username: identity.username },
+            });
+          ping();
+          this.metaTimer = this.time.addEvent({ delay: 8000, loop: true, callback: ping });
+        }
+      });
+      this.metaChannel = meta;
     } catch {
       // networking is best-effort — the world works without it
     }

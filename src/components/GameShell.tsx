@@ -5,11 +5,14 @@ import type Phaser from "phaser";
 import { createGame } from "@/game/createGame";
 import { emitGame, onGame } from "@/game/EventBus";
 import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { DOOR_STATE_LABELS, KNOCK_REASONS } from "@/game/constants";
 import type { DoorInfo } from "@/game/types";
 import type { WorldRoom } from "@/lib/rooms";
 import type { PendingKnock } from "@/lib/knocks";
 import type { DoorNote } from "@/lib/notes";
+import type { Friend, FriendRequest } from "@/lib/friends";
+import FriendsPanel from "@/components/FriendsPanel";
 import { fetchRepoSnapshot } from "@/lib/github";
 import WorldMap from "@/components/WorldMap";
 
@@ -28,6 +31,8 @@ export default function GameShell({
   worldRooms = [],
   myRoom = null,
   pendingKnocks = [],
+  friends = [],
+  friendRequests = [],
   doorNotes = [],
 }: {
   playerName?: string;
@@ -38,6 +43,8 @@ export default function GameShell({
   worldRooms?: WorldRoom[];
   myRoom?: WorldRoom | null;
   pendingKnocks?: PendingKnock[];
+  friends?: Friend[];
+  friendRequests?: FriendRequest[];
   doorNotes?: DoorNote[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -50,6 +57,8 @@ export default function GameShell({
   const [room, setRoom] = useState<{ ownerName: string; roomId: string; githubUsername: string | null; githubRepo: string | null } | null>(null);
   const [repoSnap, setRepoSnap] = useState<ReturnType<typeof fetchRepoSnapshot> extends Promise<infer T> ? T : never>(null);
   const [mapOpen, setMapOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [onlineHubs, setOnlineHubs] = useState<Map<string, string>>(new Map());
   const [nearPortal, setNearPortal] = useState(false);
   const [invite, setInvite] = useState<{ ownerName: string; ownerKey: string } | null>(null);
   const [chat, setChat] = useState<Array<{ username: string; content: string; at: number }>>([]);
@@ -137,6 +146,29 @@ export default function GameShell({
 
 
 
+  // online friends: listen to meta pings while the friends panel is open
+  useEffect(() => {
+    if (!friendsOpen || !isSupabaseConfigured || !userId) return;
+    const supabase = createClient();
+    const channel = supabase.channel("knock:hubs-meta");
+    const seen = new Map<string, { hub: string; at: number }>();
+    channel.on("broadcast", { event: "here" }, ({ payload }) => {
+      seen.set(payload.userKey as string, { hub: payload.hub as string, at: Date.now() });
+    });
+    void channel.subscribe();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const next = new Map<string, string>();
+      for (const [key, value] of seen) if (now - value.at < 16000) next.set(key, value.hub);
+      setOnlineHubs(next);
+    }, 3000);
+    return () => {
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [friendsOpen, userId]);
+
+
   const openDialogFromHud = () => {
     if (!nearDoor || dialog) return;
     setDialog(nearDoor);
@@ -197,6 +229,25 @@ export default function GameShell({
         <p className="mt-1 text-xs text-zinc-400">Available — {activity}</p>
       </div>
 
+      {/* friends toggle (spec §9: compact, not the primary interface) */}
+      {userId && !room && !mapOpen && (
+        <button
+          type="button"
+          onClick={() => setFriendsOpen((v) => !v)}
+          className="absolute left-3 top-[76px] z-10 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 font-pixel text-[8px] text-emerald-300 backdrop-blur-sm hover:border-emerald-500/60"
+        >
+          FRIENDS{friendRequests.length > 0 ? " ●" : ""}
+        </button>
+      )}
+      {userId && friendsOpen && !room && (
+        <FriendsPanel
+          userId={userId}
+          friends={friends}
+          friendRequests={friendRequests}
+          onlineHubs={onlineHubs}
+          onClose={() => setFriendsOpen(false)}
+        />
+      )}
       {/* signed-in room controls */}
       {userId && myRoom && (
         <PlayerPanel playerName={playerName} initialActivity={activity} myRoom={myRoom} char={char} />
