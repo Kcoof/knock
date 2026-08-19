@@ -80,6 +80,7 @@ export interface GameEvents {
   "portal:near": (near: boolean) => void;
   "worldmap:open": () => void;
   "worldmap:close": () => void;
+  "friend:goknock": (payload: { roomId: string | null }) => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }

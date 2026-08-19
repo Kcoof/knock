@@ -3,6 +3,8 @@ import { getProfile } from "@/lib/supabase/server";
 import { getWorldRooms } from "@/lib/rooms";
 import { getPendingKnocks } from "@/lib/knocks";
 import { getDoorNotes } from "@/lib/notes";
+import { getFriends, getFriendRequests } from "@/lib/friends";
+import { getMyRoom } from "@/lib/rooms";
 import { normalizeHub } from "@/game/constants";
 import type { CharacterKey } from "@/game/types";
 
@@ -20,8 +22,10 @@ export default async function WorldPage({
   const hub = normalizeHub(hubParam);
 
   const profile = await getProfile();
-  const rooms = await getWorldRooms(3);
-  const mine = profile ? rooms.find((r) => r.ownerId === profile.id) ?? null : null;
+  const friends = await getFriends(profile?.id ?? null);
+  const rooms = await getWorldRooms(3, friends.map((f) => f.userId));
+  const mine = await getMyRoom(profile?.id ?? null);
+  const requests = await getFriendRequests(profile?.id ?? null);
   const pendingKnocks = await getPendingKnocks(mine?.roomId ?? null);
   const doorNotes = await getDoorNotes(mine?.roomId ?? null);
 
@@ -38,6 +42,8 @@ export default async function WorldPage({
       worldRooms={rooms}
       myRoom={mine}
       pendingKnocks={pendingKnocks}
+      friends={friends}
+      friendRequests={requests}
       doorNotes={doorNotes}
     />
   );
