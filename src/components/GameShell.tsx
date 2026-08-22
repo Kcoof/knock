@@ -13,6 +13,7 @@ import type { PendingKnock } from "@/lib/knocks";
 import type { DoorNote } from "@/lib/notes";
 import type { Friend, FriendRequest } from "@/lib/friends";
 import FriendsPanel from "@/components/FriendsPanel";
+import EventBoard from "@/components/EventBoard";
 import { fetchRepoSnapshot } from "@/lib/github";
 import WorldMap from "@/components/WorldMap";
 
@@ -58,6 +59,7 @@ export default function GameShell({
   const [repoSnap, setRepoSnap] = useState<ReturnType<typeof fetchRepoSnapshot> extends Promise<infer T> ? T : never>(null);
   const [mapOpen, setMapOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const [onlineHubs, setOnlineHubs] = useState<Map<string, string>>(new Map());
   const [nearPortal, setNearPortal] = useState(false);
   const [invite, setInvite] = useState<{ ownerName: string; ownerKey: string } | null>(null);
@@ -238,6 +240,18 @@ export default function GameShell({
         >
           FRIENDS{friendRequests.length > 0 ? " ●" : ""}
         </button>
+      )}
+      {userId && !room && !mapOpen && !friendsOpen && (
+        <button
+          type="button"
+          onClick={() => setEventsOpen((v) => !v)}
+          className="absolute left-3 top-[116px] z-10 rounded-md border border-zinc-700/80 bg-zinc-900/80 px-3 py-1.5 font-pixel text-[8px] text-violet-300 backdrop-blur-sm hover:border-violet-500/60"
+        >
+          EVENTS
+        </button>
+      )}
+      {userId && eventsOpen && !room && (
+        <EventBoard userId={userId} currentHub={hub} onClose={() => setEventsOpen(false)} />
       )}
       {userId && friendsOpen && !room && (
         <FriendsPanel
