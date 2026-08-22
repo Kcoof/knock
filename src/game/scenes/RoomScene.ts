@@ -44,6 +44,7 @@ export class RoomScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private pressed = new Set<string>();
+  private touchVec = { x: 0, y: 0 };
   private currentDir = 0;
   private net?: RealtimeService;
   private remotes = new Map<string, RemotePlayer>();
@@ -115,6 +116,10 @@ export class RoomScene extends Phaser.Scene {
     window.addEventListener("keyup", this.onKeyUp);
 
     this.unsubscribers.push(
+      onGame("touch:move", (vec) => {
+        this.touchVec = vec;
+      }),
+      onGame("touch:interact", () => this.tryExit()),
       onGame("chat:send", (content: string) => {
         this.net?.sendChat(content);
       }),
@@ -290,8 +295,8 @@ export class RoomScene extends Phaser.Scene {
     if (!this.player?.active) return;
 
     if (!this.chatInputOpen) {
-      let vx = 0;
-      let vy = 0;
+      let vx = this.touchVec.x;
+      let vy = this.touchVec.y;
       if (this.pressed.has("a") || this.pressed.has("arrowleft")) vx -= 1;
       if (this.pressed.has("d") || this.pressed.has("arrowright")) vx += 1;
       if (this.pressed.has("w") || this.pressed.has("arrowup")) vy -= 1;

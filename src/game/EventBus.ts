@@ -81,6 +81,8 @@ export interface GameEvents {
   "worldmap:open": () => void;
   "worldmap:close": () => void;
   "friend:goknock": (payload: { roomId: string | null }) => void;
+  "touch:move": (vec: { x: number; y: number }) => void;
+  "touch:interact": () => void;
   "dialog:closed": () => void;
   toast: (text: string) => void;
 }
