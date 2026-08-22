@@ -14,6 +14,7 @@ import type { DoorNote } from "@/lib/notes";
 import type { Friend, FriendRequest } from "@/lib/friends";
 import FriendsPanel from "@/components/FriendsPanel";
 import EventBoard from "@/components/EventBoard";
+import TouchControls from "@/components/TouchControls";
 import { fetchRepoSnapshot } from "@/lib/github";
 import WorldMap from "@/components/WorldMap";
 
@@ -60,6 +61,7 @@ export default function GameShell({
   const [mapOpen, setMapOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [touchDevice] = useState(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
   const [onlineHubs, setOnlineHubs] = useState<Map<string, string>>(new Map());
   const [nearPortal, setNearPortal] = useState(false);
   const [invite, setInvite] = useState<{ ownerName: string; ownerKey: string } | null>(null);
@@ -312,6 +314,8 @@ export default function GameShell({
           </div>
         </div>
       )}
+
+      <TouchControls visible={touchDevice && !dialog && !mapOpen} />
 
       {/* world portal prompt + map overlay (V2) */}
       {nearPortal && !mapOpen && !room && (

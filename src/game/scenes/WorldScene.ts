@@ -94,6 +94,7 @@ export class WorldScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private pressed = new Set<string>();
+  private touchVec = { x: 0, y: 0 };
   private doors: DoorRuntime[] = [];
   private nearDoor: DoorRuntime | null = null;
   private dialogOpen = false;
@@ -197,6 +198,10 @@ export class WorldScene extends Phaser.Scene {
         // opened from the React HUD (click/tap path) — freeze movement
         this.dialogOpen = true;
       }),
+      onGame("touch:move", (vec) => {
+        this.touchVec = vec;
+      }),
+      onGame("touch:interact", () => this.tryOpenKnockDialog()),
       onGame("friend:goknock", ({ roomId }) => {
         const door = roomId ? this.doors.find((d) => d.roomId === roomId) : null;
         if (door) {
@@ -427,12 +432,13 @@ export class WorldScene extends Phaser.Scene {
     if (!this.player?.active) return;
 
     if (!this.dialogOpen) {
-      let vx = 0;
-      let vy = 0;
+      let vx = this.touchVec.x;
+      let vy = this.touchVec.y;
       if (this.pressed.has("a") || this.pressed.has("arrowleft")) vx -= 1;
       if (this.pressed.has("d") || this.pressed.has("arrowright")) vx += 1;
       if (this.pressed.has("w") || this.pressed.has("arrowup")) vy -= 1;
       if (this.pressed.has("s") || this.pressed.has("arrowdown")) vy += 1;
+      if (vx === 0 && vy === 0) { /* nothing */ }
 
       const moving = vx !== 0 || vy !== 0;
       if (moving) {
