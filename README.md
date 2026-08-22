@@ -74,6 +74,7 @@ This project is built phase by phase (see the spec, §42). Every phase:
 | 7 | `feature/v15` | V1.5: character picker, room themes, GitHub context in rooms, Come Here invites |
 | 8 | `feature/v2-world` | V2: KNOCK World — 4 country hubs with biomes, world portal + map with live counts, public room directory, passport |
 | 9 | `feature/friends` | Friends: search, requests, compact panel with live online status, Visit/Knock actions, friends-first room placement |
+| 10 | `feature/more-hubs`, `feature/events`, `feature/mobile`, `feature/voice` | Spec-complete extras: 7 country hubs, community event board, mobile touch controls, voice in rooms (WebRTC) |
 
 ## Asset licenses
 
