@@ -15,6 +15,7 @@ import type { Friend, FriendRequest } from "@/lib/friends";
 import FriendsPanel from "@/components/FriendsPanel";
 import EventBoard from "@/components/EventBoard";
 import TouchControls from "@/components/TouchControls";
+import VoicePanel from "@/components/VoicePanel";
 import { fetchRepoSnapshot } from "@/lib/github";
 import WorldMap from "@/components/WorldMap";
 
@@ -317,6 +318,13 @@ export default function GameShell({
 
       <TouchControls visible={touchDevice && !dialog && !mapOpen} />
 
+      {/* voice inside rooms (spec §13) — signed-in builders only */}
+      {room && userId && (
+        <VoicePanel
+          roomId={room.roomId}
+          identity={{ key: userId, username: playerName }}
+        />
+      )}
       {/* world portal prompt + map overlay (V2) */}
       {nearPortal && !mapOpen && !room && (
         <button
