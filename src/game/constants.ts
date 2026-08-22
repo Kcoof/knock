@@ -50,6 +50,9 @@ export const HUBS = {
   sa: { name: "Saudi Arabia Hub", ground: "sand", accent: "#eab308" },
   japan: { name: "Japan Hub", ground: "light", accent: "#f472b6" },
   us: { name: "United States Hub", ground: "snow", accent: "#60a5fa" },
+  uk: { name: "United Kingdom Hub", ground: "grass", accent: "#a78bfa" },
+  germany: { name: "Germany Hub", ground: "snow", accent: "#f87171" },
+  egypt: { name: "Egypt Hub", ground: "sand", accent: "#fbbf24" },
 } as const;
 
 export type HubId = keyof typeof HUBS;
