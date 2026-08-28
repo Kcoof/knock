@@ -21,3 +21,57 @@ body {
 .font-pixel {
   font-family: var(--font-pixel), var(--font-geist-mono), monospace;
 }
+
+/* Qwen UI component animations */
+@keyframes pulse-border {
+0% { box-shadow: 0 0 10px rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); }
+50% { box-shadow: 0 0 20px rgba(139,92,246,0.3); border-color: rgba(139,92,246,0.6); }
+100% { box-shadow: 0 0 10px rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); }}
+
+@keyframes slide-down-fade {
+0% { opacity: 0; transform: translateY(-20px); }
+100% { opacity: 1; transform: translateY(0); }}
+
+@keyframes ripple-expand {
+0% { transform: scale(0.5); opacity: 0.8; }
+100% { transform: scale(2.5); opacity: 0; }}
+
+@keyframes modal-pop {
+0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+100% { opacity: 1; transform: scale(1) translateY(0); }}
+
+@keyframes shake-knock {
+0%, 100% { transform: translateX(0); }
+25% { transform: translateX(-2px) rotate(-1deg); }
+50% { transform: translateX(2px) rotate(1deg); }
+75% { transform: translateX(-1px) rotate(-0.5deg); }}
+
+@keyframes pop-in {
+0% { opacity: 0; transform: translateY(10px) scale(0.9); }
+100% { opacity: 1; transform: translateY(0) scale(1); }}
+
+@keyframes fade-in-up {
+0% { opacity: 0; transform: translateY(5px); }
+100% { opacity: 1; transform: translateY(0); }}
+
+@keyframes shake {
+0%, 100% { transform: translateX(0); }
+25% { transform: translateX(-2px); }
+75% { transform: translateX(2px); }}
+
+@keyframes spin-slow {
+from { transform: rotate(0deg); }
+to { transform: rotate(360deg); }}
+
+@keyframes spin-reverse {
+from { transform: rotate(360deg); }
+to { transform: rotate(0deg); }}
+
+@keyframes pop-down {
+0% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+100% { opacity: 1; transform: translateY(0) scale(1); }}
+
+@keyframes slide-in-left {
+from { transform: translateX(-100%); opacity: 0; }
+to { transform: translateX(0); opacity: 1; }}
+
