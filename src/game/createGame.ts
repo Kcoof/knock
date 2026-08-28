@@ -27,7 +27,7 @@ export function createGame(parent: HTMLElement, options: CreateGameOptions = {})
     // canvas stays readable for screenshots, tests, and screen sharing.
     type: Phaser.CANVAS,
     parent,
-    backgroundColor: "#0b0f0a",
+    backgroundColor: "#1a1410",
     pixelArt: true,
     roundPixels: true,
     scale: {

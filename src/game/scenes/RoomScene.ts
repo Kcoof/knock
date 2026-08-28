@@ -93,14 +93,14 @@ export class RoomScene extends Phaser.Scene {
 
     const px = (ROOM_W * TILE) / 2;
     const py = (ROOM_H - 2.2) * TILE;
-    this.playerShadow = this.add.ellipse(px, py + 4, 24, 10, 0x000000, 0.25).setDepth(48);
+    this.playerShadow = this.add.ellipse(px, py + 4, 30, 10, 0x000000, 0.25).setDepth(48);
     this.player = this.physics.add
       .sprite(px, py, `char-${PLAYER_CHAR as CharacterKey}`)
       .setOrigin(0.5, 0.9)
-      .setScale(2)
+      .setScale(1.5)
       .setDepth(49);
     this.player.setCollideWorldBounds(true);
-    this.player.body?.setSize(18, 14, true);
+    this.player.body?.setSize(16, 12, true);
     this.physics.add.collider(this.player, solids);
     this.physics.world.setBounds(0, 0, ROOM_W * TILE, ROOM_H * TILE);
 
@@ -225,11 +225,11 @@ export class RoomScene extends Phaser.Scene {
       const sprite = this.add
         .sprite(x, y, "char-mage")
         .setOrigin(0.5, 0.9)
-        .setScale(2)
+        .setScale(1.5)
         .setDepth(48)
         .setFrame(idleFrame(0))
         .setAlpha(0);
-      const shadow = this.add.ellipse(x, y + 4, 24, 10, 0x000000, 0.25).setDepth(47).setAlpha(0);
+      const shadow = this.add.ellipse(x, y + 4, 30, 10, 0x000000, 0.25).setDepth(47).setAlpha(0);
       const label = this.add
         .text(x, y - 40, p.username, {
           fontFamily: "monospace",

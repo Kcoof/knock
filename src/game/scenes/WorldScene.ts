@@ -3,7 +3,6 @@ import {
   DOOR_INTERACT_DISTANCE,
   HUBS,
   normalizeHub,
-  DOOR_STATE_COLORS,
   MAP_H,
   MAP_W,
   PLAYER_CHAR,
@@ -13,19 +12,18 @@ import {
 } from "../constants";
 import { emitGame, onGame } from "../EventBus";
 import {
-  BENCHES,
   BUILDINGS,
-  DECOR,
+  BUSHES,
   DOORS,
-  GARDENS,
+  FLOWER_GROUPS,
   LAMPS,
   NPCS,
-  PATHS,
+  PATH_LINES,
   PLAZA,
   POND,
-  PROPS,
   SPAWN,
   TREES,
+  WELL,
   doorStateLabel,
   doorWorldPos,
 } from "../worldData";
@@ -33,9 +31,10 @@ import type { BuildingSpec, CharacterKey } from "../types";
 import { RealtimeService } from "../net/RealtimeService";
 import type { PlayerIdentity, PositionEvent } from "../net/RealtimeService";
 import { camFadeIn, camFadeOut, camFlash } from "../cameraFx";
+import { mulberry32 } from "../warmDusk";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 interface RemotePlayer {
   key: string;
@@ -43,7 +42,7 @@ interface RemotePlayer {
   char: string;
   guest: boolean;
   sprite: Phaser.GameObjects.Sprite;
-  shadow: Phaser.GameObjects.Ellipse;
+  shadow: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
   targetX: number;
   targetY: number;
@@ -59,6 +58,7 @@ interface DoorRuntime {
   y: number;
   nameplate: Phaser.GameObjects.Text;
   light: Phaser.GameObjects.Arc;
+  halo?: Phaser.GameObjects.Arc;
   roomId?: string;
   ownerId?: string;
 }
@@ -70,11 +70,11 @@ interface RoomUpdateEvent {
   username: string;
 }
 
-const ROOF_TILES: Record<BuildingSpec["roof"], { top: number; body: number }> = {
-  red: { top: 52, body: 53 },
-  red2: { top: 64, body: 65 },
-  orange: { top: 72, body: 73 },
-  stone: { top: 108, body: 109 },
+/** Door-light colors from the Warm Dusk reference (amber family). */
+const DOOR_LIGHT: Record<string, number> = {
+  open: 0xfbbf24,
+  knock: 0xfb923c,
+  focus: 0xf87171,
 };
 
 const CHAR_DIRS = ["down", "left", "right", "up"] as const;
@@ -88,12 +88,14 @@ function idleFrame(facing: number): number {
 }
 
 /**
- * The playable pixel world. Phase 1 is entirely local: mock residents, mock
- * door states, no backend. The scene talks to the React HUD through EventBus.
+ * The playable pixel world, drawn with Qwen's Warm Dusk art: procedural
+ * terrain (grass / dirt paths / brick plaza / pond), generated buildings,
+ * layered trees, lamps, a plaza well and warm characters. Talks to the
+ * React HUD through the EventBus.
  */
 export class WorldScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite;
-  private playerShadow!: Phaser.GameObjects.Ellipse;
+  private playerShadow!: Phaser.GameObjects.Image;
   private pressed = new Set<string>();
   private touchVec = { x: 0, y: 0 };
   private doors: DoorRuntime[] = [];
@@ -114,6 +116,10 @@ export class WorldScene extends Phaser.Scene {
     speed: number;
     pauseUntil: number;
   }> = [];
+
+  /** Terrain grid: 0 grass, 1 dirt, 2 plaza, 3 water (reference encoding). */
+  private grid = new Uint8Array(MAP_W * MAP_H);
+  private foamMask = new Uint8Array(MAP_W * MAP_H);
 
   private onKeyDown = (event: KeyboardEvent) => {
     if (this.dialogOpen) return;
@@ -145,9 +151,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createWorld(): void {
-    // V2 hub: biome ground, per-hub channel, hub banner, travel portal
+    // V2 hub: per-hub channel, hub banner, travel portal
     const hub = normalizeHub(this.registry.get("hub") as string | undefined);
-    this.biome = WorldScene.BIOME[HUBS[hub].ground] ?? WorldScene.BIOME.grass;
 
     this.doors = [];
     this.nearDoor = null;
@@ -159,7 +164,6 @@ export class WorldScene extends Phaser.Scene {
     this.buildGround();
     this.buildBuildings(solids);
     this.buildTrees(solids);
-    this.buildGardens(solids);
     this.buildProps(solids);
     this.buildLamps(solids);
 
@@ -237,7 +241,7 @@ export class WorldScene extends Phaser.Scene {
       onGame("dialog:closed", () => {
         this.dialogOpen = false;
       }),
-      onGame("room:update", (event: RoomUpdateEvent) => {
+      onGame("room:update", (event) => {
         this.applyRoomUpdate(event);
         this.net?.sendRoomState(event);
       }),
@@ -364,22 +368,21 @@ export class WorldScene extends Phaser.Scene {
     const sprite = this.add
       .sprite(x, y, `char-${char}`)
       .setOrigin(0.5, 0.9)
-      .setScale(2)
-      .setDepth(49)
+      .setDepth(y)
       .setFrame(idleFrame(0))
       .setAlpha(0);
-    const shadow = this.makeShadow(x, y + 4, 48).setAlpha(0);
+    const shadow = this.makeShadow(x, y + 4, y - 1).setAlpha(0);
     const label = this.add
-      .text(x, y - 40, username + (guest ? " (guest)" : ""), {
+      .text(x, y - 34, username + (guest ? " (guest)" : ""), {
         fontFamily: "monospace",
         fontSize: "8px",
-        color: guest ? "#a1a1aa" : "#93c5fd",
-        backgroundColor: "#18181bcc",
+        color: guest ? "#a8a29e" : "#93c5fd",
+        backgroundColor: "#0c0a09e0",
         padding: { x: 2, y: 1 },
         resolution: 3,
       })
       .setOrigin(0.5, 1)
-      .setDepth(50)
+      .setDepth(y + 1)
       .setAlpha(0);
     this.tweens.add({ targets: [sprite, label, shadow], alpha: 1, duration: 300 });
 
@@ -424,8 +427,9 @@ export class WorldScene extends Phaser.Scene {
         remote.sprite.setFrame(idleFrame(remote.dir));
       }
 
-      remote.shadow.setPosition(remote.sprite.x, remote.sprite.y + 4);
-      remote.label.setPosition(remote.sprite.x, remote.sprite.y - 40);
+      remote.sprite.setDepth(remote.sprite.y);
+      remote.shadow.setPosition(remote.sprite.x, remote.sprite.y + 4).setDepth(remote.sprite.y - 1);
+      remote.label.setPosition(remote.sprite.x, remote.sprite.y - 34).setDepth(remote.sprite.y + 1);
     }
   }
 
@@ -486,209 +490,157 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  // --- world construction -------------------------------------------------
+  // --- world construction (Warm Dusk) ----------------------------------------
 
   /**
-   * LPC auto-terrain ground: every cell is grass, dirt (paths/plaza) or
-   * water, and each tile's four corners pick the correct transition piece
-   * from the LPC atlas (Tiled's corner rule), giving soft blended edges
-   * everywhere like a hand-painted map.
+   * Terrain per the reference: circular pond first, then the brick plaza,
+   * then dirt paths stamped along lines (paths skip pond and plaza cells).
    */
-  private terrainAt(tx: number, ty: number): "g" | "d" | "w" {
-    if (tx >= POND.x && tx < POND.x + POND.w && ty >= POND.y && ty < POND.y + POND.h) {
-      return "w";
-    }
-    if (tx >= PLAZA.x && tx < PLAZA.x + PLAZA.w && ty >= PLAZA.y && ty < PLAZA.y + PLAZA.h) {
-      return "d";
-    }
-    for (const p of PATHS) {
-      if (tx >= p.x && tx < p.x + p.w && ty >= p.y && ty < p.y + p.h) return "d";
-    }
-    return "g";
-  }
-
-  private cellTerrain(tx: number, ty: number): "g" | "d" | "w" | null {
-    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return "g";
-    return this.terrainAt(tx, ty);
-  }
-
-  /** Tiled terrain corner rule: equal orthogonal neighbors win, else diagonal. */
-  private cornerTerrain(
-    self: "g" | "d" | "w",
-    a: "g" | "d" | "w",
-    b: "g" | "d" | "w",
-    diag: "g" | "d" | "w",
-  ): "g" | "d" | "w" {
-    return a === b ? a : diag;
-  }
-
-  /** Ground texture key sets per hub biome (V2 world). */
-  private static readonly BIOME: Record<string, { pure: string; path: string; water: string }> = {
-    grass: { pure: "lpc_g", path: "gd", water: "gw" },
-    sand: { pure: "lpc_sand", path: "sd", water: "sw" },
-    light: { pure: "lpc_light", path: "ld", water: "lw" },
-    snow: { pure: "lpc_snow", path: "nd", water: "nw" },
-  };
-
-  private biome = WorldScene.BIOME.grass;
-  private terrainTexture(tx: number, ty: number): string {
-    const base = this.terrainAt(tx, ty);
-    const up = this.cellTerrain(tx, ty - 1);
-    const down = this.cellTerrain(tx, ty + 1);
-    const left = this.cellTerrain(tx - 1, ty);
-    const right = this.cellTerrain(tx + 1, ty);
-    const corners: Array<"g" | "d" | "w"> = [
-      this.cornerTerrain(base, up!, left!, this.cellTerrain(tx - 1, ty - 1)!),
-      this.cornerTerrain(base, up!, right!, this.cellTerrain(tx + 1, ty - 1)!),
-      this.cornerTerrain(base, down!, left!, this.cellTerrain(tx - 1, ty + 1)!),
-      this.cornerTerrain(base, down!, right!, this.cellTerrain(tx + 1, ty + 1)!),
-    ];
-    const foreign = corners.find((c) => c !== base);
-    if (!foreign) {
-      if (base !== "d" && base !== "w") {
-        // biome ground (grass / sand / light / snow) with variants
-        const h = Math.abs(((tx * 73856093) ^ (ty * 19349663)) % 100);
-        const variant = h < 55 ? "" : h < 80 ? "_v1" : "_v2";
-        const key = `lpc_${this.biome.pure.replace("lpc_", "")}${variant}`;
-        return this.textures.exists(`lpc_${key}`) ? `lpc_${key}` : this.biome.pure;
+  private buildGroundGrid(): void {
+    const pondCx = POND.cx * TILE;
+    const pondCy = POND.cy * TILE;
+    const pondR = POND.r * TILE;
+    for (let gy = 0; gy < MAP_H; gy++) {
+      for (let gx = 0; gx < MAP_W; gx++) {
+        // deterministic ±6px jitter on the pond rim, like the reference
+        const jitter = (((gx * 73856093) ^ (gy * 19349663)) % 13) - 6;
+        if (Math.hypot(gx * TILE + 16 - pondCx, gy * TILE + 16 - pondCy) < pondR + jitter) {
+          this.grid[gy * MAP_W + gx] = 3;
+        }
       }
-      const h = Math.abs(((tx * 73856093) ^ (ty * 19349663)) % 100);
-      const variant = h < 55 ? "" : h < 80 ? "_v1" : "_v2";
-      const key = `lpc_${base}${variant}`;
-      return this.textures.exists(key) ? key : `lpc_${base}`;
     }
-    const prefix = foreign === "d" ? this.biome.path : this.biome.water;
-    const bits = corners.map((c) => (c === foreign ? "1" : "0")).join("");
-    const h = Math.abs(((tx * 83492791) ^ (ty * 2971215073)) % 100);
-    const variant = h < 45 ? "" : h < 75 ? "_v1" : "_v2";
-    const key = `lpc_${prefix}_${bits}${variant}`;
-    return this.textures.exists(key) ? `lpc_${prefix}_${bits}` : this.biome.pure;
+    for (let gy = PLAZA.y; gy < PLAZA.y + PLAZA.h; gy++) {
+      for (let gx = PLAZA.x; gx < PLAZA.x + PLAZA.w; gx++) {
+        this.grid[gy * MAP_W + gx] = 2;
+      }
+    }
+    const width = TILE * 0.9;
+    for (const [a, b] of PATH_LINES) {
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const steps = Math.max(1, Math.round(len / 0.5));
+      for (let i = 0; i <= steps; i++) {
+        const px = (a.x + ((b.x - a.x) * i) / steps) * TILE + 16;
+        const py = (a.y + ((b.y - a.y) * i) / steps) * TILE + 16;
+        for (let gy = Math.floor((py - width) / TILE); gy <= Math.floor((py + width) / TILE); gy++) {
+          for (let gx = Math.floor((px - width) / TILE); gx <= Math.floor((px + width) / TILE); gx++) {
+            if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) continue;
+            if (this.grid[gy * MAP_W + gx] === 0) this.grid[gy * MAP_W + gx] = 1;
+          }
+        }
+      }
+    }
+    // water foam edges: bit per non-water neighbour (1 up, 2 down, 4 left, 8 right)
+    for (let gy = 0; gy < MAP_H; gy++) {
+      for (let gx = 0; gx < MAP_W; gx++) {
+        const idx = gy * MAP_W + gx;
+        if (this.grid[idx] !== 3) continue;
+        let m = 0;
+        if (gy > 0 && this.grid[idx - MAP_W] !== 3) m |= 1;
+        if (gy < MAP_H - 1 && this.grid[idx + MAP_W] !== 3) m |= 2;
+        if (gx > 0 && this.grid[idx - 1] !== 3) m |= 4;
+        if (gx < MAP_W - 1 && this.grid[idx + 1] !== 3) m |= 8;
+        this.foamMask[idx] = m;
+      }
+    }
+  }
+
+  private cell(gx: number, gy: number): number {
+    if (gx < 0 || gy < 0 || gx >= MAP_W || gy >= MAP_H) return 0;
+    return this.grid[gy * MAP_W + gx];
   }
 
   private buildGround(): void {
+    this.buildGroundGrid();
     const rt = this.add
       .renderTexture(0, 0, MAP_W * TILE, MAP_H * TILE)
       .setOrigin(0, 0)
       .setDepth(-10);
-    this.ground = rt;
 
-    for (let ty = 0; ty < MAP_H; ty++) {
-      for (let tx = 0; tx < MAP_W; tx++) {
-        rt.draw(this.terrainTexture(tx, ty), tx * TILE, ty * TILE);
-      }
-    }
-
-    // bake bushes and flowers into the ground
-    for (const d of DECOR) {
-      rt.draw(d.key, Math.floor(d.x * TILE), Math.floor(d.y * TILE));
-    }
-  }
-
-  private ground?: Phaser.GameObjects.RenderTexture;
-
-  private buildBuildings(solids: Phaser.Physics.Arcade.StaticGroup): void {
-    const rt = this.ground!;
-
-    for (const b of BUILDINGS) {
-      const roof = ROOF_TILES[b.roof];
-      const stone = b.roof === "stone";
-      const wall = stone ? "t77" : "t87";
-      const base = stone ? "t111" : "t85";
-      const windowTile = stone ? "t96" : "t88";
-      const doorTile = stone ? "t91" : "t89";
-
-      for (let row = 0; row < b.h; row++) {
-        for (let col = 0; col < b.w; col++) {
-          let key: string;
-          if (row === 0) {
-            key = `t${roof.top}`;
-          } else if (row === 1) {
-            key = `t${roof.body}`;
-          } else if (row === b.h - 1) {
-            // bottom row: base wall with the door in the middle, corner trims
-            if (col === b.doorOffsetX) key = doorTile;
-            else if (col === 0 || col === b.w - 1) key = stone ? "t120" : "t44";
-            else key = base;
-          } else if (row === b.h - 2) {
-            // wall row with windows and an arch above public doors
-            if (stone && col === b.doorOffsetX) key = "t63";
-            else if (col === 1 || col === b.w - 2) key = windowTile;
-            else key = wall;
-          } else {
-            key = wall;
-          }
-          rt.draw(key, (b.x + col) * TILE, (b.y + row) * TILE);
+    for (let gy = 0; gy < MAP_H; gy++) {
+      for (let gx = 0; gx < MAP_W; gx++) {
+        const idx = gy * MAP_W + gx;
+        const tile = this.grid[idx];
+        const tx = gx * TILE;
+        const ty = gy * TILE;
+        if (tile === 0) {
+          const hash = ((gx * 73856093) ^ (gy * 19349663)) >>> 0;
+          rt.draw(`wd_grass${hash % 3}`, tx, ty);
+        } else if (tile === 1) {
+          rt.draw("wd_dirt", tx, ty);
+        } else if (tile === 2) {
+          rt.draw("wd_plaza", tx, ty);
+        } else {
+          rt.draw("wd_water", tx, ty);
+          if (this.foamMask[idx]) rt.draw(`wd_foam_${this.foamMask[idx]}`, tx, ty);
         }
       }
-
-      solids.add(
-        this.add
-          .rectangle(
-            b.x * TILE + (b.w * TILE) / 2,
-            b.y * TILE + (b.h * TILE) / 2,
-            b.w * TILE,
-            b.h * TILE,
-          )
-          .setVisible(false),
-      );
-
-      this.lastNameplate = this.addNameplate(b);
-      this.addDoor(b);
     }
-
-    // soft drop shadows behind buildings for depth (reference look)
-    for (const b of BUILDINGS) {
-      this.add
-        .rectangle(
-          b.x * TILE + (b.w * TILE) / 2 + 12,
-          b.y * TILE + ((b.h - 1) * TILE) / 2 + 12,
-          b.w * TILE,
-          (b.h - 1) * TILE,
-          0x000000,
-          0.14,
-        )
-        .setOrigin(0.5)
-        .setDepth(-9);
-    }
-
-    // animated water shimmer highlights on the pond
-    for (let i = 0; i < 9; i++) {
-      const hx = (POND.x + 1 + ((i * 73856093) % (POND.w - 2))) * TILE + 16;
-      const hy = (POND.y + 1 + ((i * 19349663) % (POND.h - 3))) * TILE + 16;
-      const shimmer = this.add
-        .ellipse(hx, hy, 14, 5, 0xe8f4ff, 0.22)
-        .setDepth(-8);
-      this.tweens.add({
-        targets: shimmer,
-        alpha: { from: 0.05, to: 0.3 },
-        scaleX: { from: 0.7, to: 1.15 },
-        duration: 1300 + ((i * 613) % 900),
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.InOut",
-      });
+    // soft blends where dirt/plaza meet grass (reference pass)
+    for (let gy = 0; gy < MAP_H; gy++) {
+      for (let gx = 0; gx < MAP_W; gx++) {
+        const tile = this.grid[gy * MAP_W + gx];
+        if (tile !== 1 && tile !== 2) continue;
+        const nearGrass =
+          this.cell(gx, gy - 1) === 0 || this.cell(gx, gy + 1) === 0 ||
+          this.cell(gx - 1, gy) === 0 || this.cell(gx + 1, gy) === 0;
+        if (nearGrass) rt.draw(tile === 1 ? "wd_transDirt" : "wd_transPlaza", gx * TILE, gy * TILE);
+      }
     }
 
     // Phaser 4 buffers RenderTexture draw commands — flush them
     rt.render();
   }
 
+  private buildBuildings(solids: Phaser.Physics.Arcade.StaticGroup): void {
+    for (const b of BUILDINGS) {
+      const bx = b.x * TILE;
+      const by = b.y * TILE;
+      const bw = b.w * TILE;
+      const bh = b.h * TILE;
+      const baseY = by + bh;
+      const doorX = (b.x + b.w / 2) * TILE;
+
+      // soft shadow at the base (reference)
+      this.add.rectangle(bx + bw / 2 + 3, baseY - 2, bw, 10, 0x000000, 0.25).setDepth(baseY - 2);
+
+      const sprite = this.add
+        .image(bx, by, `wd_bldg_${b.id}`)
+        .setOrigin(0, 0)
+        .setDepth(baseY);
+      void sprite;
+
+      this.add
+        .image(doorX, baseY, "wd_door")
+        .setOrigin(0.5, 1)
+        .setDepth(baseY + 1);
+
+      // walls block; the two roof rows are walk-behind (depth sorted)
+      const body = this.add
+        .rectangle(bx + bw / 2, by + 2 * TILE + (bh - 2 * TILE) / 2, bw, bh - 2 * TILE)
+        .setVisible(false);
+      solids.add(body);
+
+      this.lastNameplate = this.addNameplate(b);
+      this.addDoor(b);
+    }
+  }
+
   private addNameplate(b: BuildingSpec): Phaser.GameObjects.Text {
     const info = this.roomDoorInfo(b);
     const line2 = b.roomType === "personal" ? info.activity : doorStateLabel(info.state);
-    const cx = b.x * TILE + (b.w * TILE) / 2;
+    const cx = (b.x + b.w / 2) * TILE;
     return this.add
-      .text(cx, b.y * TILE - 5, `${info.buildingName}\n${line2}`, {
+      .text(cx, b.y * TILE - 6, `${info.buildingName}\n${line2}`, {
         fontFamily: "monospace",
         fontSize: "10px",
-        color: "#e4e4e7",
-        backgroundColor: "#18181bcc",
-        padding: { x: 3, y: 2 },
+        color: "#fef3c7",
+        backgroundColor: "#0c0a09e0",
+        padding: { x: 4, y: 2 },
         align: "center",
         resolution: 3,
       })
       .setOrigin(0.5, 1)
-      .setDepth(20);
+      .setDepth((b.y + b.h) * TILE + 2);
   }
 
   /**
@@ -723,17 +675,18 @@ export class WorldScene extends Phaser.Scene {
   private addDoor(b: BuildingSpec): void {
     const info = this.roomDoorInfo(b);
     const pos = doorWorldPos(b);
+    const lightY = (b.y + b.h) * TILE - 30;
+    const color = DOOR_LIGHT[info.state];
 
-    const light = this.add
-      .circle(pos.x, (b.y + b.h - 2) * TILE + 8, 5, DOOR_STATE_COLORS[info.state])
-      .setDepth(21);
+    const halo = this.add.circle(pos.x, lightY, 7, color, 0.6).setDepth((b.y + b.h) * TILE + 2);
     this.tweens.add({
-      targets: light,
-      alpha: { from: 0.55, to: 1 },
+      targets: halo,
+      alpha: { from: 0.4, to: 0.8 },
       duration: 800,
       yoyo: true,
       repeat: -1,
     });
+    const light = this.add.circle(pos.x, lightY, 3, color).setDepth((b.y + b.h) * TILE + 3);
 
     const rooms = (this.registry.get("worldRooms") ?? []) as Array<{ roomId: string; ownerId: string }>;
     const slot = PERSONAL_SLOTS.indexOf(b.id);
@@ -746,6 +699,7 @@ export class WorldScene extends Phaser.Scene {
       y: pos.y,
       nameplate: this.lastNameplate!,
       light,
+      halo,
       roomId: room?.roomId,
       ownerId: room?.ownerId,
     });
@@ -764,87 +718,63 @@ export class WorldScene extends Phaser.Scene {
       activity: event.activity || "Building something",
       state: event.doorState,
     };
-    door.light.setFillStyle(DOOR_STATE_COLORS[event.doorState]);
     const line2 =
       door.building.roomType === "personal"
         ? door.info.activity
         : doorStateLabel(door.info.state);
     door.nameplate.setText(`${door.info.buildingName}\n${line2}`);
+    door.light.setFillStyle(DOOR_LIGHT[event.doorState]);
+    door.halo?.setFillStyle(DOOR_LIGHT[event.doorState]);
   }
 
   private buildTrees(solids: Phaser.Physics.Arcade.StaticGroup): void {
-    const TREE_TEXTURES: Record<string, string> = {
-      A: "treeLpcA",
-      B: "treeLpcB",
-      C: "treeLpcC",
-      D: "treeLpcD",
-      pale: "treeLpcPale",
-      autumn: "treeLpcAutumn",
-    };
     for (const t of TREES) {
-      const px = t.x * TILE;
-      const py = t.y * TILE;
-      // soft ground shadow under the canopy, drawn before the tree
+      const px = t.x * TILE + 16;
+      const py = (t.y + 1) * TILE;
+      // soft shadow under the canopy (reference: 28x8 bar at the trunk base)
+      this.add.rectangle(px, py + 2, 28, 8, 0x000000, 0.25).setDepth(-7);
       this.add
-        .ellipse(px + 32, py + 96, 80, 22, 0x000000, 0.18)
-        .setDepth(-7);
-      // LPC trees are 256px art rendered at 0.5 (128px ≈ 4 tiles) — lush,
-      // like the reference; anchored so the trunk base sits on the tile slot
-      const sprite = this.add
-        .image(px + TILE, py + 3 * TILE, TREE_TEXTURES[t.variant] ?? "treeLpcA")
+        .image(px, py + 2, `wd_tree_${t.variant}`)
         .setOrigin(0.5, 1)
-        .setScale(0.5)
-        .setDepth(py + 3 * TILE);
-      void sprite;
-
-      // collision covers the trunk row only, so the canopy hangs overhead
-      const body = this.add.rectangle(px + TILE, py + 2 * TILE + 14, 44, 14).setVisible(false);
+        .setDepth(py);
+      // collision covers the trunk base only, so the canopy hangs overhead
+      const body = this.add.rectangle(px, py + 6, 16, 12).setVisible(false);
       solids.add(body);
     }
   }
 
-  private buildGardens(solids: Phaser.Physics.Arcade.StaticGroup): void {
-    const rt = this.ground!;
-    for (const g of GARDENS) {
-      for (let ty = g.y; ty < g.y + g.h; ty++) {
-        for (let tx = g.x; tx < g.x + g.w; tx++) {
-          if (ty === g.y || ty === g.y + g.h - 1 || tx === g.x || tx === g.x + g.w - 1) {
-            rt.draw("t99", tx * TILE, ty * TILE);
-          } else {
-            rt.draw("t43", tx * TILE, ty * TILE);
-          }
-        }
-      }
-      // gap in the bottom fence as a little gate
-      const gx = g.x + Math.floor(g.w / 2);
-      rt.draw("t43", gx * TILE, (g.y + g.h - 1) * TILE);
-
-      // block the fence line so gardens read as enclosed
-      const ring = this.add
-        .rectangle(
-          g.x * TILE + (g.w * TILE) / 2,
-          g.y * TILE + (g.h * TILE) / 2,
-          g.w * TILE,
-          g.h * TILE,
-        )
-        .setVisible(false);
-      solids.add(ring);
-      void gx;
-    }
-    rt.render();
-  }
-
   private buildProps(solids: Phaser.Physics.Arcade.StaticGroup): void {
-    for (const prop of PROPS) {
-      const sprite = this.add
-        .sprite(prop.x * TILE, prop.y * TILE, typeof prop.tile === "number" ? `t${prop.tile}` : prop.tile)
-        .setOrigin(0.5, 0.85)
-        .setDepth(prop.y * TILE);
-      if (prop.blocked) {
-        solids.add(sprite);
-        const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
-        body.setSize(24, 16);
-        body.setOffset(4, 16);
+    // the plaza well (reference position)
+    const wellX = WELL.x * TILE;
+    const wellY = WELL.y * TILE;
+    this.add
+      .image(wellX + 16, wellY + 18, "wd_shadow")
+      .setOrigin(0.5, 0.5)
+      .setDepth(wellY + 3);
+    this.add
+      .image(wellX, wellY + 4, "wd_well")
+      .setOrigin(0.5, 1)
+      .setDepth(wellY + 4);
+    const wellBody = this.add.rectangle(wellX, wellY - 4, 28, 14).setVisible(false);
+    solids.add(wellBody);
+
+    for (const bush of BUSHES) {
+      this.add
+        .image(bush.x * TILE + 16, bush.y * TILE + 22, "wd_bush")
+        .setOrigin(0.5, 1)
+        .setDepth(bush.y * TILE + 22);
+    }
+
+    for (const [gi, group] of FLOWER_GROUPS.entries()) {
+      const R = mulberry32(101 + gi * 17);
+      for (let i = 0; i < group.n; i++) {
+        const fx = (group.x + (R() * 2.4 - 1.2)) * TILE + 16;
+        const fy = (group.y + (R() * 2.4 - 1.2)) * TILE + 16;
+        const color = group.palette[(R() * group.palette.length) | 0];
+        this.add
+          .image(fx - 5, fy - 11, `wd_flower_${color.slice(1)}`)
+          .setOrigin(0, 0)
+          .setDepth(fy);
       }
     }
   }
@@ -854,11 +784,11 @@ export class WorldScene extends Phaser.Scene {
       const px = lamp.x * TILE;
       const py = lamp.y * TILE;
       this.add
-        .sprite(px, py, "t94")
-        .setOrigin(0.5, 0.85)
-        .setDepth(py);
+        .image(px, py + 2, "wd_lamp")
+        .setOrigin(0.5, 1)
+        .setDepth(py + 2);
 
-      const glow = this.add.ellipse(px, py - 16, 52, 52, 0xfbbf24, 0.18).setDepth(py - 1);
+      const glow = this.add.ellipse(px, py - 30, 52, 52, 0xfbbf24, 0.18).setDepth(py + 1);
       this.tweens.add({
         targets: glow,
         alpha: { from: 0.1, to: 0.24 },
@@ -868,20 +798,7 @@ export class WorldScene extends Phaser.Scene {
         ease: "Sine.InOut",
       });
 
-      const body = this.add.rectangle(px, py - 4, 16, 16).setVisible(false);
-      solids.add(body);
-    }
-
-    for (const bench of BENCHES) {
-      const px = bench.x * TILE;
-      const py = bench.y * TILE;
-      const sprite = this.add
-        .image(px, py, "bench")
-        .setOrigin(0.5, 0.85)
-        .setScale(2)
-        .setDepth(py);
-      void sprite;
-      const body = this.add.rectangle(px, py - 8, 44, 16).setVisible(false);
+      const body = this.add.rectangle(px, py - 4, 14, 12).setVisible(false);
       solids.add(body);
     }
   }
@@ -889,7 +806,7 @@ export class WorldScene extends Phaser.Scene {
   /** World portal: walk up and press E to open the world map (V2 travel). */
   private buildPortal(): void {
     const px = 36.5 * TILE;
-    const py = 19.5 * TILE;
+    const py = 24.5 * TILE;
     const ring1 = this.add.ellipse(px, py, 44, 60, 0x7c3aed, 0.35).setDepth(49);
     const ring2 = this.add.ellipse(px, py, 26, 38, 0xa78bfa, 0.5).setDepth(49);
     this.add
@@ -919,16 +836,16 @@ export class WorldScene extends Phaser.Scene {
   private portalPos: { x: number; y: number } | null = null;
 
   private makeShadow(x: number, y: number, depth: number) {
-    return this.add.ellipse(x, y, 24, 10, 0x000000, 0.25).setDepth(depth);
+    return this.add.image(x, y, "wd_shadow").setOrigin(0.5, 0.5).setDepth(depth);
   }
 
   private addCharLabel(sprite: Phaser.GameObjects.Sprite, text: string, color: string) {
     this.add
-      .text(sprite.x, sprite.y - 40, text, {
+      .text(sprite.x, sprite.y - 34, text, {
         fontFamily: "monospace",
         fontSize: "8px",
         color,
-        backgroundColor: "#18181bcc",
+        backgroundColor: "#0c0a09e0",
         padding: { x: 2, y: 1 },
         resolution: 3,
       })
@@ -943,11 +860,10 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.add
         .sprite(px, py, `char-${npc.char}`)
         .setOrigin(0.5, 0.9)
-        .setScale(2)
         .setDepth(py)
         .setFrame(idleFrame(npc.facing));
       this.makeShadow(px, py + 4, py - 1);
-      this.addCharLabel(sprite, `${npc.name} — ${npc.status}`, "#a7f3d0");
+      this.addCharLabel(sprite, `${npc.name} — ${npc.status}`, "#a8a29e");
 
       // gentle idle sway so standing characters still feel alive
       this.tweens.add({
@@ -964,7 +880,7 @@ export class WorldScene extends Phaser.Scene {
           sprite,
           points: npc.waypoints.map((w) => ({ x: w.x * TILE, y: w.y * TILE })),
           target: 1,
-          speed: 72,
+          speed: 64,
           pauseUntil: 0,
         });
       }
@@ -990,6 +906,7 @@ export class WorldScene extends Phaser.Scene {
       const step = Math.min(w.speed * dt, dist);
       w.sprite.x += (dx / dist) * step;
       w.sprite.y += (dy / dist) * step;
+      w.sprite.setDepth(w.sprite.y);
 
       const dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : 2) : dy < 0 ? 3 : 0;
       const animKey = `char-${w.sprite.texture.key.replace("char-", "")}-${CHAR_DIRS[dir]}`;
@@ -1008,21 +925,20 @@ export class WorldScene extends Phaser.Scene {
     this.player = this.physics.add
       .sprite(px, py, `char-${PLAYER_CHAR as CharacterKey}`)
       .setOrigin(0.5, 0.9)
-      .setScale(2)
-      .setDepth(50);
+      .setDepth(py);
     this.player.setCollideWorldBounds(true);
-    this.player.body?.setSize(18, 14, true);
+    this.player.body?.setSize(16, 12, true);
     this.player.setFrame(idleFrame(this.currentDir));
     this.physics.add.collider(this.player, solids);
 
     const playerName = this.registry.get("playerName") as string | undefined;
     if (playerName) {
       this.playerLabel = this.add
-        .text(px, py - 42, playerName, {
+        .text(px, py - 36, playerName, {
           fontFamily: "monospace",
           fontSize: "8px",
-          color: "#fbbf24",
-          backgroundColor: "#18181bcc",
+          color: "#fef3c7",
+          backgroundColor: "#0c0a09e0",
           padding: { x: 2, y: 1 },
           resolution: 3,
         })
@@ -1030,11 +946,13 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(51);
     }
 
-    // keep the shadow and label glued to the player's feet/head
+    // keep the shadow and label glued to the player's feet/head, and the
+    // player depth-sorted against buildings and trees
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, () => {
       if (this.player?.active) {
-        this.playerShadow.setPosition(this.player.x, this.player.y + 4);
-        this.playerLabel?.setPosition(this.player.x, this.player.y - 42);
+        this.player.setDepth(this.player.y);
+        this.playerShadow.setPosition(this.player.x, this.player.y + 4).setDepth(this.player.y - 1);
+        this.playerLabel?.setPosition(this.player.x, this.player.y - 36).setDepth(this.player.y + 1);
       }
     });
   }
