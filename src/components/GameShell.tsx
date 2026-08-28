@@ -573,6 +573,20 @@ export default function GameShell({
           <span className="text-[10px] text-zinc-500">claim your room</span>
         </button>
       )}
+      {userId && !room && (
+        <button
+          onClick={() => {
+            void createClient()
+              .auth.signOut()
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload resets the game before the landing page
+              .finally(() => window.location.assign("/"));
+          }}
+          className="fixed top-3 right-3 z-40 pointer-events-auto flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md border border-zinc-700 rounded-xl px-4 py-2 hover:border-zinc-500 hover:bg-zinc-800/95 transition-all duration-200"
+        >
+          <span className="font-pixel text-xs text-zinc-400 tracking-wider">SIGN OUT</span>
+          <span className="text-[10px] text-zinc-600">{playerName}</span>
+        </button>
+      )}
       <ControlsHint touch={touchDevice} />
       {toast && <Toast key={toast} text={toast} />}
 
