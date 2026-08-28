@@ -231,12 +231,15 @@ export class WorldScene extends Phaser.Scene {
         this.activeInvite = null;
         if (!invite) return;
         const door = invite.roomId ? this.doors.find((d) => d.roomId === invite.roomId) : null;
-        if (door) {
-          this.player.setPosition(door.x, door.y + 40);
-          camFlash(this);
-        } else {
+        if (!door) {
           emitGame("toast", invite.ownerName + String.fromCharCode(8217) + "s room is not in view right now.");
+          return;
         }
+        // The invitation is permission: record an accepted knock so the
+        // knock-first door check passes, then walk in.
+        this.player.setPosition(door.x, door.y + 30);
+        camFlash(this);
+        void this.admitByInvite(invite.roomId!, door);
       }),
       onGame("dialog:closed", () => {
         this.dialogOpen = false;
@@ -307,14 +310,23 @@ export class WorldScene extends Phaser.Scene {
         },
         onKnockResult: (event) => {
           const identity = this.registry.get("netIdentity") as { key: string } | undefined;
-          if (identity && event.visitorKey === identity.key) {
-            emitGame(
-              "toast",
-              event.accepted
-                ? `🟢 ${event.ownerName} let you in! (Room interiors arrive in Phase 6)`
-                : `${event.ownerName} said "not now" — maybe later.`,
-            );
+          if (!identity || event.visitorKey !== identity.key) return;
+          if (!event.accepted) {
+            emitGame("toast", `${event.ownerName} said "not now" — maybe later.`);
+            return;
           }
+          // Admitted: walk the visitor to the door and straight inside.
+          const door = event.roomId ? this.doors.find((d) => d.roomId === event.roomId) : null;
+          if (!door) {
+            emitGame("toast", `${event.ownerName} let you in — but their room is not on display in this hub.`);
+            return;
+          }
+          emitGame("toast", `🟢 ${event.ownerName} let you in!`);
+          this.dialogOpen = false;
+          emitGame("dialog:closed");
+          this.player.setPosition(door.x, door.y + 30);
+          camFlash(this);
+          void this.enterRoom(door);
         },
       });
       void this.net.connect();
@@ -834,6 +846,32 @@ export class WorldScene extends Phaser.Scene {
 
   private wasNearPortal = false;
   private portalPos: { x: number; y: number } | null = null;
+
+  /** Invited over: persist an accepted knock, then enter the room. */
+  private async admitByInvite(roomId: string, door: DoorRuntime): Promise<void> {
+    const identity = this.registry.get("netIdentity") as
+      | { key: string; guest: boolean }
+      | undefined;
+    if (identity && !identity.guest) {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        await supabase.from("knocks").insert({
+          id: crypto.randomUUID(),
+          room_id: roomId,
+          visitor_id: identity.key,
+          reason: "Invited over",
+          message: "",
+          status: "accepted",
+        });
+      } catch {
+        // best effort — an open door still admits us below
+      }
+    }
+    this.dialogOpen = false;
+    emitGame("dialog:closed");
+    void this.enterRoom(door);
+  }
 
   private makeShadow(x: number, y: number, depth: number) {
     return this.add.image(x, y, "wd_shadow").setOrigin(0.5, 0.5).setDepth(depth);
