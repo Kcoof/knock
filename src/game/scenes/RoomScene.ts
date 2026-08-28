@@ -282,8 +282,12 @@ export class RoomScene extends Phaser.Scene {
   }
 
   private tryExit(): void {
-    const bounds = this.exitZone.getBounds();
-    if (!Phaser.Geom.Rectangle.Contains(bounds, this.player.x, this.player.y + 8)) return;
+    // Overlap the physics body with the zone: a feet-point test lets a
+    // player pressed against the south wall slide past the zone entirely.
+    const zone = this.exitZone.getBounds();
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const playerBox = new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+    if (!Phaser.Geom.Rectangle.Overlaps(zone, playerBox)) return;
     camFadeOut(this, () => {
       this.registry.set("returnPos", this.data_.exit);
       emitGame("room:exited", this.data_.exit);
