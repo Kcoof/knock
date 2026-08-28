@@ -1,79 +1,19 @@
-import { MAP_H, MAP_W } from "./constants";
+import { MAP_H, MAP_W, TILE } from "./constants";
 import type { BuildingSpec, CharacterKey, DoorInfo } from "./types";
 
 /**
- * The Phase 1 mock world: a small builder neighborhood with three personal
- * rooms, two community buildings and a focus zone, gardens, trees and a
- * pond. Everything here is mock data — Phase 2+ replaces it with
- * Supabase-backed rooms and presence.
+ * World layout from Qwen's "Warm Dusk" reference: a warm evening village
+ * with a central brick plaza and well, a circular pond, and six buildings
+ * connected by dirt paths. Personal slots are filled with real database
+ * rooms at runtime (worldRooms); guests keep this mock neighborhood.
  */
 export const BUILDINGS: BuildingSpec[] = [
-  {
-    id: "reehana",
-    name: "Reehana's Room",
-    x: 3,
-    y: 3,
-    w: 7,
-    h: 4,
-    roof: "red",
-    doorOffsetX: 3,
-    roomType: "personal",
-  },
-  {
-    id: "ahmed",
-    name: "Ahmed's Room",
-    x: 24,
-    y: 3,
-    w: 7,
-    h: 4,
-    roof: "orange",
-    doorOffsetX: 3,
-    roomType: "personal",
-  },
-  {
-    id: "sara",
-    name: "Sara's Room",
-    x: 32,
-    y: 10,
-    w: 7,
-    h: 4,
-    roof: "red2",
-    doorOffsetX: 3,
-    roomType: "personal",
-  },
-  {
-    id: "community",
-    name: "Community Room",
-    x: 3,
-    y: 20,
-    w: 10,
-    h: 5,
-    roof: "stone",
-    doorOffsetX: 4,
-    roomType: "community",
-  },
-  {
-    id: "library",
-    name: "Library",
-    x: 27,
-    y: 20,
-    w: 8,
-    h: 5,
-    roof: "stone",
-    doorOffsetX: 3,
-    roomType: "community",
-  },
-  {
-    id: "focus",
-    name: "Focus Zone",
-    x: 15,
-    y: 27,
-    w: 7,
-    h: 4,
-    roof: "orange",
-    doorOffsetX: 3,
-    roomType: "community",
-  },
+  { id: "reehana", name: "Reehana's Room", x: 5, y: 3, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "personal" },
+  { id: "ahmed", name: "Ahmed's Room", x: 29, y: 3, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "personal" },
+  { id: "community", name: "Community Room", x: 17, y: 2, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "community" },
+  { id: "library", name: "Library", x: 17, y: 27, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "community" },
+  { id: "focus", name: "Focus Zone", x: 5, y: 26, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "community" },
+  { id: "sara", name: "Sara's Room", x: 29, y: 26, w: 6, h: 5, roof: "red", doorOffsetX: 3, roomType: "personal" },
 ];
 
 /** Mock door data keyed by building id. */
@@ -82,7 +22,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "reehana",
     buildingName: "Reehana's Room",
     owner: "Reehana",
-    activity: "Training a vision model",
+    activity: "Building v2",
     status: "Focus",
     state: "focus",
   },
@@ -90,7 +30,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "ahmed",
     buildingName: "Ahmed's Room",
     owner: "Ahmed",
-    activity: "Working on Authentication API",
+    activity: "Fixing bugs",
     status: "Working",
     state: "knock",
   },
@@ -98,7 +38,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "sara",
     buildingName: "Sara's Room",
     owner: "Sara",
-    activity: "Sketching UI ideas",
+    activity: "Sketching",
     status: "Available",
     state: "open",
   },
@@ -106,7 +46,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "community",
     buildingName: "Community Room",
     owner: "Everyone",
-    activity: "Open hangout space",
+    activity: "Town hall",
     status: "Available",
     state: "open",
   },
@@ -114,7 +54,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "library",
     buildingName: "Library",
     owner: "Everyone",
-    activity: "Quiet reading & research",
+    activity: "Docs & refs",
     status: "Available",
     state: "open",
   },
@@ -122,7 +62,7 @@ export const DOORS: Record<string, DoorInfo> = {
     id: "focus",
     buildingName: "Focus Zone",
     owner: "Everyone",
-    activity: "Deep work only",
+    activity: "Heads down",
     status: "Focus",
     state: "focus",
   },
@@ -142,224 +82,107 @@ export interface NpcV2 {
   waypoints?: Array<{ x: number; y: number }>;
 }
 
-/** Mock residents standing in the world (no backend yet). */
+/** Residents from the reference: two at their doors, one roaming the plaza. */
 export const NPCS: NpcV2[] = [
+  { id: "npc-ahmed", name: "Ahmed", status: "Working", char: "noble", x: 32, y: 8.75, facing: 0 },
+  { id: "npc-sara", name: "Sara", status: "Available", char: "mage", x: 32, y: 31.75, facing: 0 },
   {
-    id: "npc-ahmed",
-    name: "Ahmed",
-    status: "Working",
-    char: "noble",
-    x: 29.6,
-    y: 8.5,
-    facing: 3,
-  },
-  {
-    id: "npc-sara",
-    name: "Sara",
-    status: "Available",
-    char: "mage",
-    x: 33.6,
-    y: 16.4,
-    facing: 2,
-  },
-  {
-    id: "npc-traveler",
-    name: "Yuki",
-    status: "Just visiting",
+    id: "npc-milo",
+    name: "Milo",
+    status: "Roaming",
     char: "traveler",
-    x: 8.5,
-    y: 17.5,
-    facing: 2,
+    x: 20.5,
+    y: 13,
+    facing: 0,
     waypoints: [
-      { x: 8.5, y: 17.5 },
-      { x: 19.5, y: 17.5 },
-      { x: 19.5, y: 25.4 },
-      { x: 26.2, y: 25.4 },
-      { x: 26.2, y: 17.5 },
-      { x: 31.2, y: 17.5 },
+      { x: 20.5, y: 13 },
+      { x: 20.5, y: 19 },
+      { x: 26.5, y: 16 },
+      { x: 20.5, y: 19 },
+      { x: 20.5, y: 13 },
+      { x: 14.5, y: 16 },
     ],
   },
 ];
 
-/** Player spawn point in tiles. */
-export const SPAWN = { x: 19.5, y: 17.5 };
+/** Player spawn point in tiles (south of the plaza, reference position). */
+export const SPAWN = { x: 20.5, y: 21 };
 
-/** Water pond rectangle in tiles (kept one row clear of paths so the
- * grass-water transition band always has grass to blend into). */
-export const POND = { x: 32, y: 27, w: 7, h: 6 };
+/** Circular pond: center in tiles + radius in tiles (reference shape). */
+export const POND = { cx: 33, cy: 18, r: 4.6 };
 
-/** Brick plaza in tiles (center meeting point). */
-export const PLAZA = { x: 17, y: 15.5, w: 6, h: 4 };
+/** Brick plaza rectangle in tiles. */
+export const PLAZA = { x: 14, y: 14, w: 12, h: 6 };
 
-/** Sand path rectangles in tiles, drawn onto the ground layer. */
-export const PATHS: Array<{ x: number; y: number; w: number; h: number }> = [
-  // Main east-west corridor
-  { x: 2, y: 16, w: 36, h: 2 },
-  // North-south spokes to each door
-  { x: 6, y: 7, w: 2, h: 9 }, // Reehana
-  { x: 26, y: 7, w: 2, h: 9 }, // Ahmed
-  { x: 34, y: 14, w: 2, h: 2 }, // Sara (short link to corridor)
-  { x: 6, y: 18, w: 2, h: 2 }, // Community
-  { x: 29, y: 18, w: 2, h: 2 }, // Library
-  { x: 17, y: 25, w: 2, h: 2 }, // Focus Zone
-  // Community <-> Library south walkway
-  { x: 7, y: 25, w: 24, h: 1 },
+/** Dirt path lines (tile coords); stamped with the reference width. */
+export const PATH_LINES: Array<[{ x: number; y: number }, { x: number; y: number }]> = [
+  [{ x: 20, y: 6 }, { x: 20, y: 13 }],
+  [{ x: 20, y: 19 }, { x: 20, y: 27 }],
+  [{ x: 8, y: 5 }, { x: 20, y: 5 }],
+  [{ x: 20, y: 5 }, { x: 32, y: 5 }],
+  [{ x: 8, y: 28 }, { x: 20, y: 28 }],
+  [{ x: 20, y: 28 }, { x: 32, y: 28 }],
+  [{ x: 8, y: 5 }, { x: 8, y: 28 }],
+  [{ x: 32, y: 5 }, { x: 32, y: 28 }],
+  [{ x: 20, y: 16 }, { x: 14, y: 16 }],
+  [{ x: 20, y: 16 }, { x: 26, y: 16 }],
 ];
 
-/** Trees: top-left tile of a 2x3 stamp (canopy 2x2 + trunk row). */
-export type TreeVariant = "A" | "B" | "C" | "D" | "pale" | "autumn";
+/** Trees: top-left tile of the trunk slot (reference positions). */
+export type TreeVariant = "g" | "o";
 
-/** Trees: top-left tile of the 2x3 trunk slot; LPC art renders ~4 tiles tall. */
 export const TREES: Array<{ x: number; y: number; variant: TreeVariant }> = [
-  { x: 1, y: 3, variant: "A" },
-  { x: 1, y: 7, variant: "D" },
-  { x: 11, y: 3, variant: "B" },
-  { x: 13, y: 6, variant: "autumn" },
-  { x: 17, y: 5, variant: "A" },
-  { x: 20, y: 3, variant: "C" },
-  { x: 22, y: 8, variant: "B" },
-  { x: 30, y: 3, variant: "D" },
-  { x: 31, y: 6, variant: "autumn" },
-  { x: 37, y: 6, variant: "A" },
-  { x: 32, y: 4, variant: "B" },
-  { x: 12, y: 19, variant: "C" },
-  { x: 12, y: 23, variant: "pale" },
-  { x: 20, y: 21, variant: "A" },
-  { x: 24, y: 15, variant: "D" },
-  { x: 9, y: 27, variant: "B" },
-  { x: 13, y: 30, variant: "pale" },
-  { x: 23, y: 26, variant: "autumn" },
-  { x: 25, y: 31, variant: "C" },
-  { x: 37, y: 14, variant: "A" },
-  { x: 1, y: 17, variant: "pale" },
-  { x: 1, y: 29, variant: "autumn" },
+  { x: 10, y: 9, variant: "g" },
+  { x: 12, y: 11, variant: "o" },
+  { x: 9, y: 13, variant: "g" },
+  { x: 30, y: 9, variant: "g" },
+  { x: 32, y: 11, variant: "o" },
+  { x: 30, y: 13, variant: "g" },
+  { x: 11, y: 24, variant: "g" },
+  { x: 13, y: 26, variant: "o" },
+  { x: 10, y: 27, variant: "g" },
+  { x: 30, y: 24, variant: "g" },
+  { x: 32, y: 26, variant: "o" },
+  { x: 30, y: 27, variant: "g" },
+  { x: 3, y: 15, variant: "g" },
+  { x: 3, y: 18, variant: "g" },
+  { x: 36, y: 15, variant: "g" },
+  { x: 36, y: 18, variant: "g" },
 ];
 
-/** Flower gardens: rect is fenced with a gap; flowers scattered inside. */
-export const GARDENS: Array<{ x: number; y: number; w: number; h: number }> = [
-  { x: 12, y: 10, w: 4, h: 3 },
-  { x: 19, y: 9, w: 4, h: 3 },
-  { x: 36, y: 18, w: 3, h: 3 },
-  { x: 4, y: 27, w: 4, h: 3 },
+/** Flower clusters: center tile, count, and petal palette (reference groups). */
+export const FLOWER_GROUPS: Array<{ x: number; y: number; n: number; palette: string[] }> = [
+  { x: 11, y: 10, n: 6, palette: ["#f87171", "#fbbf24", "#fdba74"] },
+  { x: 29, y: 10, n: 6, palette: ["#fbbf24", "#f87171", "#fef3c7"] },
+  { x: 11, y: 27, n: 6, palette: ["#fdba74", "#fbbf24", "#fef3c7"] },
+  { x: 29, y: 27, n: 6, palette: ["#f87171", "#fef3c7", "#fbbf24"] },
 ];
 
-/** Street lamps along the main corridor. */
+/** Bushes in tiles. */
+export const BUSHES: Array<{ x: number; y: number }> = [
+  { x: 14, y: 10 },
+  { x: 26, y: 10 },
+  { x: 14, y: 24 },
+  { x: 26, y: 24 },
+  { x: 6, y: 20 },
+  { x: 34, y: 20 },
+];
+
+/** Street lamps (reference positions: two on the plaza, two on the main path). */
 export const LAMPS: Array<{ x: number; y: number }> = [
-  { x: 15.5, y: 18.9 },
-  { x: 23.5, y: 18.9 },
-  { x: 7.5, y: 15.1 },
-  { x: 31.5, y: 15.1 },
-  { x: 19.5, y: 25.1 },
-  { x: 34.5, y: 25.1 },
+  { x: 17.5, y: 16 },
+  { x: 23.5, y: 16 },
+  { x: 20.5, y: 11 },
+  { x: 20.5, y: 21 },
 ];
 
-/** Benches: original KNOCK prop, drawn in props/bench.png. */
-export const BENCHES: Array<{ x: number; y: number }> = [
-  { x: 20.5, y: 20.9 },
-  { x: 32.9, y: 24.5 },
-  { x: 28.4, y: 18.7 },
-  { x: 8.6, y: 19.3 },
-];
-
-/**
- * Ground props: tile index, tile position, and whether the player collides.
- * The well, barrels, crates and rocks make the world feel lived-in.
- */
-export const PROPS: Array<{
-  tile: number | string;
-  x: number;
-  y: number;
-  blocked: boolean;
-}> = [
-  { tile: 131, x: 22.5, y: 19.4, blocked: true }, // well on the plaza edge
-  { tile: 103, x: 13.6, y: 26.4, blocked: true }, // crate by Community Room
-  { tile: 106, x: 14.7, y: 26.5, blocked: true }, // barrel
-  { tile: 130, x: 25.4, y: 26.5, blocked: true }, // small barrel near Focus Zone
-  { tile: 92, x: 38.5, y: 24.5, blocked: true }, // rock near pond
-  { tile: 92, x: 30.6, y: 27.4, blocked: true },
-  { tile: 92, x: 2.5, y: 22.5, blocked: true },
-  { tile: 93, x: 25.6, y: 25.6, blocked: false }, // sign by Focus Zone path
-  { tile: 93, x: 32.4, y: 18.6, blocked: false }, // sign near Library
-  { tile: 104, x: 9.5, y: 22.5, blocked: true }, // chest by Community Room wall
-  { tile: 92, x: 11.5, y: 16.5, blocked: true }, // rock on corridor
-  // Round bushes anchor mixed foliage clusters and block at their dense base.
-  { tile: "bushC", x: 10.5, y: 13.8, blocked: true }, // west garden front
-  { tile: "bushC", x: 20.5, y: 13.5, blocked: true }, // east garden front
-  { tile: "bushC", x: 22.5, y: 6.8, blocked: true }, // north trees
-  { tile: "bushC", x: 11.5, y: 31.5, blocked: true }, // south-west trees
-  { tile: "bushC", x: 25.5, y: 29.0, blocked: true }, // south trees
-  { tile: "bushC", x: 33.5, y: 25.8, blocked: true }, // pond north bank
-  { tile: "bushC", x: 37.0, y: 25.6, blocked: true }, // pond north bank
-  { tile: "bushC", x: 30.3, y: 30.0, blocked: true }, // pond west bank
-  { tile: "bushC", x: 1.0, y: 1.2, blocked: true }, // north-west corner
-  { tile: "bushC", x: 38.5, y: 1.5, blocked: true }, // north-east corner
-  { tile: "bushC", x: 1.2, y: 32.2, blocked: true }, // south-west corner
-  { tile: "bushC", x: 38.5, y: 33.0, blocked: true }, // south-east corner
-];
-
-/** Non-blocking foliage baked into the ground. */
-export const DECOR: Array<{ key: string; x: number; y: number }> = [
-  // The two garden fronts.
-  { key: "plantA", x: 9.3, y: 13.0 },
-  { key: "plantB", x: 11.2, y: 13.8 },
-  { key: "flowersB", x: 10.0, y: 14.5 },
-  { key: "plantA", x: 19.2, y: 12.5 },
-  { key: "plantB", x: 21.3, y: 13.5 },
-  { key: "flowersB", x: 22.1, y: 12.5 },
-
-  // Around tree trunks in the north and south groves.
-  { key: "plantA", x: 21.4, y: 6.8 },
-  { key: "plantB", x: 23.0, y: 7.6 },
-  { key: "flowersB", x: 22.1, y: 8.2 },
-  { key: "plantA", x: 10.3, y: 30.8 },
-  { key: "plantB", x: 12.2, y: 31.8 },
-  { key: "flowersB", x: 10.8, y: 32.5 },
-  { key: "plantA", x: 24.2, y: 28.7 },
-  { key: "plantB", x: 26.3, y: 29.6 },
-  { key: "flowersB", x: 25.0, y: 30.2 },
-
-  // Pond north and west banks.
-  { key: "plantA", x: 32.3, y: 25.1 },
-  { key: "plantB", x: 34.2, y: 26.0 },
-  { key: "flowersB", x: 33.0, y: 25.9 },
-  { key: "plantA", x: 36.0, y: 25.0 },
-  { key: "plantB", x: 38.0, y: 25.8 },
-  { key: "flowersB", x: 36.7, y: 25.9 },
-  { key: "plantA", x: 30.0, y: 28.5 },
-  { key: "plantB", x: 31.0, y: 30.6 },
-  { key: "flowersB", x: 30.2, y: 31.2 },
-
-  // Dense corner clusters frame the map edges.
-  { key: "plantA", x: 0.0, y: 0.2 },
-  { key: "plantB", x: 1.6, y: 1.2 },
-  { key: "flowersB", x: 0.4, y: 2.0 },
-  { key: "plantA", x: 37.2, y: 0.5 },
-  { key: "plantB", x: 39.0, y: 1.8 },
-  { key: "flowersB", x: 38.0, y: 2.3 },
-  { key: "plantA", x: 0.1, y: 31.2 },
-  { key: "plantB", x: 2.0, y: 32.0 },
-  { key: "flowersB", x: 0.5, y: 33.0 },
-  { key: "plantA", x: 37.0, y: 33.0 },
-  { key: "plantB", x: 39.0, y: 33.0 },
-  { key: "flowersB", x: 38.0, y: 33.0 },
-
-  // Small accents sit just off path edges.
-  { key: "flowersA", x: 2.5, y: 14.5 },
-  { key: "bushA", x: 4.5, y: 14.7 },
-  { key: "flowersA", x: 9.0, y: 18.3 },
-  { key: "bushA", x: 14.5, y: 18.5 },
-  { key: "flowersA", x: 24.5, y: 14.5 },
-  { key: "bushA", x: 29.5, y: 14.4 },
-  { key: "flowersA", x: 35.0, y: 18.5 },
-  { key: "bushA", x: 38.5, y: 16.5 },
-  { key: "flowersA", x: 14.5, y: 26.2 },
-  { key: "bushA", x: 22.5, y: 26.2 },
-];
+/** The plaza well (drawn at the reference position). */
+export const WELL = { x: 20, y: 16 };
 
 export function doorWorldPos(b: BuildingSpec): { x: number; y: number } {
   return {
-    x: (b.x + b.doorOffsetX + 0.5) * 16,
-    y: (b.y + b.h - 0.5) * 16,
+    x: (b.x + b.w / 2) * TILE,
+    y: (b.y + b.h) * TILE + 8,
   };
 }
 

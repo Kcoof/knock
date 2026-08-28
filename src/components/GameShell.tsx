@@ -553,9 +553,14 @@ export default function GameShell({
   return (
     <div className="fixed inset-0 overflow-hidden bg-zinc-950">
       <div ref={containerRef} className="absolute inset-0" data-testid="game-root" />
-      {/* ambient grade: warm sunlight tint + soft vignette for painterly cohesion */}
-      <div className="pointer-events-none absolute inset-0 z-[5] bg-amber-200 opacity-[0.04]" />
-      <div className="pointer-events-none absolute inset-0 z-[5] bg-[radial-gradient(ellipse_at_center,transparent_58%,rgba(8,12,6,0.38)_100%)]" />
+      {/* Warm Dusk ambient grade (reference vignette: warm center, dark edges) */}
+      <div
+        className="pointer-events-none absolute inset-0 z-[5]"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 38%, rgba(255,200,120,0.06) 0%, rgba(0,0,0,0) 60%, rgba(12,10,9,0.32) 100%)",
+        }}
+      />
 
       <PlayerBadge username={playerName} status={myRoom?.status ?? "available"} activity={activity} />
       <ControlsHint touch={touchDevice} />
