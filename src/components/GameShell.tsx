@@ -297,12 +297,14 @@ export default function GameShell({
   }, [eventsOpen]);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- leaving a room must reset voice state */
     if (room) return;
     voiceRef.current?.leave();
     voiceRef.current = null;
     setVoiceJoined(false);
     setVoiceMuted(false);
     setVoiceParticipants([]);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [room]);
 
   const openDialogFromHud = () => {
