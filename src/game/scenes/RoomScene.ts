@@ -121,6 +121,7 @@ export class RoomScene extends Phaser.Scene {
         this.touchVec = vec;
       }),
       onGame("touch:interact", () => this.tryExit()),
+      onGame("room:exit", () => this.exitRoom()),
       onGame("chat:send", (content: string) => {
         this.net?.sendChat(content);
       }),
@@ -281,18 +282,27 @@ export class RoomScene extends Phaser.Scene {
     remote.moving = event.moving;
   }
 
-  private tryExit(): void {
-    // Overlap the physics body with the zone: a feet-point test lets a
-    // player pressed against the south wall slide past the zone entirely.
-    const zone = this.exitZone.getBounds();
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const playerBox = new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
-    if (!Phaser.Geom.Rectangle.Overlaps(zone, playerBox)) return;
+  private exiting = false;
+
+  /** Leave the room from anywhere (EXIT button) — no exit-zone needed. */
+  private exitRoom(): void {
+    if (this.exiting) return;
+    this.exiting = true;
     camFadeOut(this, () => {
       this.registry.set("returnPos", this.data_.exit);
       emitGame("room:exited", this.data_.exit);
       this.scene.start("world");
     });
+  }
+
+  private tryExit(): void {
+    // Walk + E path: overlap the physics body with the zone (a feet-point
+    // test lets a player pressed against the south wall slide past it).
+    const zone = this.exitZone.getBounds();
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const playerBox = new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height);
+    if (!Phaser.Geom.Rectangle.Overlaps(zone, playerBox)) return;
+    this.exitRoom();
   }
 
   update(time: number, delta: number): void {

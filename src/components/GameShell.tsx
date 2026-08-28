@@ -650,6 +650,13 @@ export default function GameShell({
 
       {room && (
         <>
+          <button
+            onClick={() => emitGame("room:exit")}
+            className="fixed top-3 right-3 z-40 pointer-events-auto flex items-center gap-2 bg-zinc-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-4 py-2 shadow-[0_0_18px_rgba(251,191,36,0.12)] hover:border-amber-400/60 hover:bg-zinc-800/95 transition-all duration-200"
+          >
+            <span className="font-pixel text-xs text-amber-300 tracking-wider">EXIT ROOM</span>
+            <span className="text-[10px] text-zinc-500">back to the world</span>
+          </button>
           <RoomChatPanel
             ownerName={room.ownerName}
             messages={chat}

@@ -71,6 +71,7 @@ export interface GameEvents {
   "knock:respond": (payload: KnockRespondPayload) => void;
   "room:entered": (payload: RoomEnteredPayload) => void;
   "room:exited": (exit: { x: number; y: number }) => void;
+  "room:exit": () => void;
   "chat:send": (content: string) => void;
   "chat:message": (message: ChatMessagePayload) => void;
   "chat:focus": (focused: boolean) => void;
