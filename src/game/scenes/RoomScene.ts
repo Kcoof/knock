@@ -3,6 +3,7 @@ import { TILE, ZOOM, PLAYER_CHAR, PLAYER_SPEED } from "../constants";
 import { emitGame, onGame } from "../EventBus";
 import { RealtimeService } from "../net/RealtimeService";
 import type { PlayerIdentity, PositionEvent } from "../net/RealtimeService";
+import { camFadeIn, camFadeOut } from "../cameraFx";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { CharacterKey } from "../types";
@@ -106,7 +107,7 @@ export class RoomScene extends Phaser.Scene {
     this.cameras.main.setZoom(ZOOM);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
     this.cameras.main.setBounds(0, 0, ROOM_W * TILE, ROOM_H * TILE);
-    this.cameras.main.fadeIn(300, 0, 0, 0);
+    camFadeIn(this, 300);
 
     this.exitZone = this.add
       .zone((ROOM_W * TILE) / 2, (ROOM_H - 0.5) * TILE, TILE * 2, TILE)
@@ -283,8 +284,7 @@ export class RoomScene extends Phaser.Scene {
   private tryExit(): void {
     const bounds = this.exitZone.getBounds();
     if (!Phaser.Geom.Rectangle.Contains(bounds, this.player.x, this.player.y + 8)) return;
-    this.cameras.main.fadeOut(250, 0, 0, 0);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+    camFadeOut(this, () => {
       this.registry.set("returnPos", this.data_.exit);
       emitGame("room:exited", this.data_.exit);
       this.scene.start("world");

@@ -32,6 +32,7 @@ import {
 import type { BuildingSpec, CharacterKey } from "../types";
 import { RealtimeService } from "../net/RealtimeService";
 import type { PlayerIdentity, PositionEvent } from "../net/RealtimeService";
+import { camFadeIn, camFadeOut, camFlash } from "../cameraFx";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -185,7 +186,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
     this.cameras.main.setZoom(ZOOM);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-    this.cameras.main.fadeIn(300, 0, 0, 0);
+    camFadeIn(this, 300);
 
     // DOM-level keyboard input: works for real players and automated tests
     // alike, and keeps working regardless of canvas focus quirks.
@@ -206,7 +207,7 @@ export class WorldScene extends Phaser.Scene {
         const door = roomId ? this.doors.find((d) => d.roomId === roomId) : null;
         if (door) {
           this.player.setPosition(door.x, door.y + 40);
-          this.cameras.main.flash(200, 20, 60, 40);
+          camFlash(this);
         } else {
           emitGame("toast", "Their room is not on display in this hub right now.");
         }
@@ -228,7 +229,7 @@ export class WorldScene extends Phaser.Scene {
         const door = invite.roomId ? this.doors.find((d) => d.roomId === invite.roomId) : null;
         if (door) {
           this.player.setPosition(door.x, door.y + 40);
-          this.cameras.main.flash(200, 20, 60, 40);
+          camFlash(this);
         } else {
           emitGame("toast", invite.ownerName + String.fromCharCode(8217) + "s room is not in view right now.");
         }
@@ -1106,8 +1107,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.dialogOpen = true;
-    this.cameras.main.fadeOut(250, 0, 0, 0);
-    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+    camFadeOut(this, () => {
       this.registry.set("roomSceneData", {
         roomId: door.roomId,
         ownerName: door.info.owner,
