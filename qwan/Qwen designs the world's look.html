@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KNOCK - Cozy Pixel World</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #09090b; /* zinc-950 */
+            color: #e4e4e7; /* zinc-200 */
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            image-rendering: pixelated; /* Crisp pixels */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border: 2px solid #27272a; /* zinc-800 */
+            cursor: crosshair;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            font-size: 12px;
+            text-shadow: 1px 1px 0 #000;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui-overlay">WASD to Move | E to Interact (Near Doors/Portal)</div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * KNOCK WORLD ENGINE
+ * Procedural Pixel Art Renderer
+ */
+
+// --- CONFIG & CONSTANTS ---
+const TILE_SIZE = 32;
+const WORLD_WIDTH = 40;
+const WORLD_HEIGHT = 34;
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+const ZOOM = 1.5;
+
+// Palettes (Strict ~16 colors)
+const PAL = {
+    grassLight: '#4ade80', // Emerald 400ish
+    grassMid:   '#22c55e', // Emerald 500
+    grassDark:  '#15803d', // Emerald 700
+    dirtLight:  '#fbbf24', // Amber 400
+    dirtMid:    '#d97706', // Amber 600
+    dirtDark:   '#92400e', // Amber 800
+    brickLight: '#f87171', // Red 400
+    brickMid:   '#dc2626', // Red 600
+    brickDark:  '#991b1b', // Red 800
+    stoneLight: '#a1a1aa', // Zinc 400
+    stoneMid:   '#71717a', // Zinc 500
+    stoneDark:  '#3f3f46', // Zinc 700
+    woodLight:  '#d97706', 
+    woodMid:    '#92400e',
+    woodDark:   '#451a03',
+    waterLight: '#38bdf8', // Sky 400
+    waterMid:   '#0ea5e9', // Sky 500
+    waterDark:  '#0369a1', // Sky 700
+    black:      '#09090b',
+    white:      '#ffffff',
+    skin:       '#fcd34d',
+    shirtBlue:  '#3b82f6',
+    shirtGreen: '#10b981',
+    shirtRed:   '#ef4444',
+    roofRed:    '#ef4444',
+    roofOrange: '#f97316',
+    roofPurple: '#8b5cf6',
+    glowGreen:  '#4ade80',
+    glowYellow: '#facc15',
+    glowRed:    '#f87171'
+};
+
+// --- ART GENERATOR (Offscreen Canvases) ---
+const ART = {};
+
+function createCanvas(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+}
+
+function drawPixel(ctx, x, y, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, 1, 1);
+}
+
+function generateArt() {
+    // Helper for simple tiles
+    function makeTile(name, baseColor, detailColor, patternType) {
+        const c = createCanvas(TILE_SIZE, TILE_SIZE);
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        
+        // Base
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, TILE_SIZE, TILE_SIZE);
+        
+        // Outline
+        ctx.strokeStyle = PAL.black;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0.5, 0.5, TILE_SIZE-1, TILE_SIZE-1);
+
+        if (patternType === 'grass') {
+            // Random tufts
+            ctx.fillStyle = detailColor;
+            for(let i=0; i<5; i++) {
+                let rx = Math.floor(Math.random()*28)+2;
+                let ry = Math.floor(Math.random()*28)+2;
+                ctx.fillRect(rx, ry, 2, 2);
+                ctx.fillRect(rx+1, ry-1, 1, 1);
+            }
+        } else if (patternType === 'dirt') {
+            ctx.fillStyle = detailColor;
+            for(let i=0; i<8; i++) {
+                let rx = Math.floor(Math.random()*28)+2;
+                let ry = Math.floor(Math.random()*28)+2;
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+        } else if (patternType === 'brick') {
+            ctx.fillStyle = detailColor;
+            ctx.fillRect(0, 10, 16, 2);
+            ctx.fillRect(16, 20, 16, 2);
+            ctx.fillRect(0, 30, 16, 2);
+            ctx.strokeStyle = PAL.black;
+            ctx.beginPath();
+            ctx.moveTo(0, 10); ctx.lineTo(32, 10);
+            ctx.moveTo(0, 20); ctx.lineTo(32, 20);
+            ctx.moveTo(0, 30); ctx.lineTo(32, 30);
+            ctx.moveTo(16, 0); ctx.lineTo(16, 10);
+            ctx.moveTo(0, 10); ctx.lineTo(0, 20); // Vertical seam offset
+            ctx.moveTo(16, 20); ctx.lineTo(16, 30);
+            ctx.stroke();
+        } else if (patternType === 'stone') {
+            ctx.fillStyle = detailColor;
+            ctx.fillRect(2, 2, 12, 12);
+            ctx.fillRect(16, 2, 12, 12);
+            ctx.fillRect(2, 16, 12, 12);
+            ctx.fillRect(16, 16, 12, 12);
+            ctx.strokeStyle = PAL.black;
+            ctx.strokeRect(2, 2, 12, 12);
+            ctx.strokeRect(16, 2, 12, 12);
+            ctx.strokeRect(2, 16, 12, 12);
+            ctx.strokeRect(16, 16, 12, 12);
+        }
+
+        ART[name] = c;
+    }
+
+    makeTile('grass', PAL.grassMid, PAL.grassLight, 'grass');
+    makeTile('grassAlt', PAL.grassMid, PAL.grassDark, 'grass');
+    makeTile('dirt', PAL.dirtMid, PAL.dirtLight, 'dirt');
+    makeTile('brick', PAL.brickMid, PAL.brickLight, 'brick');
+    makeTile('stone', PAL.stoneMid, PAL.stoneLight, 'stone');
+
+    // Path Corners (Soft transitions)
+    function makePathCorner(name, dir) {
+        const c = createCanvas(TILE_SIZE, TILE_SIZE);
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        
+        // Fill with grass first
+        ctx.drawImage(ART['grass'], 0, 0);
+        
+        // Draw dirt curve
+        ctx.fillStyle = PAL.dirtMid;
+        ctx.beginPath();
+        if(dir === 'tl') { ctx.arc(TILE_SIZE, TILE_SIZE, TILE_SIZE, Math.PI, Math.PI*1.5); }
+        if(dir === 'tr') { ctx.arc(0, TILE_SIZE, TILE_SIZE, Math.PI*1.5, Math.PI*2); }
+        if(dir === 'bl') { ctx.arc(TILE_SIZE, 0, TILE_SIZE, Math.PI*0.5, Math.PI); }
+        if(dir === 'br') { ctx.arc(0, 0, TILE_SIZE, 0, Math.PI*0.5); }
+        ctx.fill();
+        
+        // Add outline on the curve edge
+        ctx.strokeStyle = PAL.dirtDark;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if(dir === 'tl') { ctx.arc(TILE_SIZE, TILE_SIZE, TILE_SIZE, Math.PI, Math.PI*1.5); }
+        if(dir === 'tr') { ctx.arc(0, TILE_SIZE, TILE_SIZE, Math.PI*1.5, Math.PI*2); }
+        if(dir === 'bl') { ctx.arc(TILE_SIZE, 0, TILE_SIZE, Math.PI*0.5, Math.PI); }
+        if(dir === 'br') { ctx.arc(0, 0, TILE_SIZE, 0, Math.PI*0.5); }
+        ctx.stroke();
+
+        ART[name] = c;
+    }
+    makePathCorner('pathTL', 'tl');
+    makePathCorner('pathTR', 'tr');
+    makePathCorner('pathBL', 'bl');
+    makePathCorner('pathBR', 'br');
+
+    // Water Tile
+    const waterC = createCanvas(TILE_SIZE, TILE_SIZE);
+    const wCtx = waterC.getContext('2d');
+    wCtx.fillStyle = PAL.waterMid;
+    wCtx.fillRect(0,0,TILE_SIZE,TILE_SIZE);
+    wCtx.fillStyle = PAL.waterLight;
+    wCtx.fillRect(4, 4, 8, 2);
+    wCtx.fillRect(16, 12, 8, 2);
+    wCtx.fillRect(8, 20, 8, 2);
+    wCtx.fillStyle = PAL.waterDark;
+    wCtx.fillRect(0,0,TILE_SIZE,2); // Top shadow
+    ART['water'] = waterC;
+
+    // Tree Parts
+    function makeTreePart(name, w, h, colorTop, colorBot, trunk=false) {
+        const c = createCanvas(w, h);
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        
+        if(trunk) {
+            ctx.fillStyle = PAL.woodDark;
+            ctx.fillRect(0,0,w,h);
+            ctx.fillStyle = PAL.woodMid;
+            ctx.fillRect(2,0,w-4,h);
+            ctx.fillStyle = PAL.woodLight;
+            ctx.fillRect(4,0,2,h);
+        } else {
+            // Canopy blob
+            ctx.fillStyle = colorBot;
+            ctx.beginPath();
+            ctx.arc(w/2, h/2, w/2-2, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.fillStyle = colorTop;
+            ctx.beginPath();
+            ctx.arc(w/2-2, h/2-2, w/2-4, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Highlight
+            ctx.fillStyle = PAL.white;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(w/2-4, h/2-4, 2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+        ART[name] = c;
+    }
+    
+    makeTreePart('treeTrunk', 12, 40, null, null, true);
+    makeTreePart('treeCanopyGreen', 48, 48, PAL.grassLight, PAL.grassDark);
+    makeTreePart('treeCanopyOrange', 48, 48, PAL.dirtLight, PAL.dirtDark); // Autumn variant
+    
+    // Bush
+    const bushC = createCanvas(24, 16);
+    const bCtx = bushC.getContext('2d');
+    bCtx.fillStyle = PAL.grassDark;
+    bCtx.beginPath(); bCtx.arc(12, 12, 10, Math.PI, 0); bCtx.fill();
+    bCtx.fillStyle = PAL.grassMid;
+    bCtx.beginPath(); bCtx.arc(12, 10, 8, Math.PI, 0); bCtx.fill();
+    bCtx.fillStyle = PAL.grassLight;
+    bCtx.fillRect(8, 4, 4, 2);
+    ART['bush'] = bushC;
+
+    // Flowers
+    const flowerC = createCanvas(16, 16);
+    const fCtx = flowerC.getContext('2d');
+    fCtx.fillStyle = PAL.white;
+    fCtx.fillRect(6, 2, 4, 4);
+    fCtx.fillStyle = PAL.yellow || '#facc15';
+    fCtx.fillRect(7, 3, 2, 2);
+    fCtx.fillStyle = PAL.pink || '#ec4899';
+    fCtx.fillRect(2, 8, 4, 4);
+    fCtx.fillRect(10, 8, 4, 4);
+    ART['flowers'] = flowerC;
+
+    // Building Components
+    function makeWallPiece(name, width, height, colorMain, colorTrim) {
+        const c = createCanvas(width, height);
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = colorMain;
+        ctx.fillRect(0,0,width,height);
+        ctx.strokeStyle = PAL.black;
+        ctx.strokeRect(0.5, 0.5, width-1, height-1);
+        
+        // Trim
+        ctx.fillStyle = colorTrim;
+        ctx.fillRect(0,0,width,4); // Top trim
+        ctx.fillRect(0,height-4,width,4); // Bottom trim
+        
+        // Window
+        if(height > 20) {
+            const wx = width/2 - 6;
+            const wy = height/2 - 6;
+            ctx.fillStyle = PAL.black;
+            ctx.fillRect(wx, wy, 12, 12);
+            ctx.fillStyle = PAL.skyLight || '#bae6fd';
+            ctx.fillRect(wx+1, wy+1, 10, 10);
+            ctx.fillStyle = PAL.white;
+            ctx.fillRect(wx+2, wy+2, 4, 4); // Reflection
+        }
+        ART[name] = c;
+    }
+
+    makeWallPiece('wallWood', 32, 32, PAL.woodMid, PAL.woodDark);
+    makeWallPiece('wallStone', 32, 32, PAL.stoneMid, PAL.stoneDark);
+    
+    // Door
+    const doorC = createCanvas(24, 32);
+    const dCtx = doorC.getContext('2d');
+    dCtx.fillStyle = PAL.woodDark;
+    dCtx.fillRect(0,0,24,32);
+    dCtx.fillStyle = PAL.woodMid;
+    dCtx.fillRect(2,2,20,28);
+    dCtx.fillStyle = PAL.gold || '#fbbf24';
+    dCtx.fillRect(18, 16, 2, 2); // Handle
+    ART['door'] = doorC;
+
+    // Roof Piece (Simple triangle-ish block for tiling)
+    function makeRoofPiece(name, color) {
+        const c = createCanvas(32, 16);
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, 16);
+        ctx.lineTo(16, 0);
+        ctx.lineTo(32, 16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = PAL.black;
+        ctx.stroke();
+        ART[name] = c;
+    }
+    makeRoofPiece('roofRed', PAL.roofRed);
+    makeRoofPiece('roofOrange', PAL.roofOrange);
+    makeRoofPiece('roofPurple', PAL.roofPurple);
+
+    // Portal
+    const portalC = createCanvas(64, 96);
+    const pCtx = portalC.getContext('2d');
+    // Frame
+    pCtx.fillStyle = PAL.stoneDark;
+    pCtx.fillRect(0, 0, 64, 96);
+    pCtx.fillStyle = PAL.stoneMid;
+    pCtx.fillRect(4, 4, 56, 88);
+    // Swirl Center
+    pCtx.fillStyle = PAL.violet || '#8b5cf6';
+    pCtx.beginPath();
+    pCtx.arc(32, 48, 20, 0, Math.PI*2);
+    pCtx.fill();
+    pCtx.fillStyle = PAL.fuchsia || '#d946ef';
+    pCtx.beginPath();
+    pCtx.arc(32, 48, 10, 0, Math.PI*2);
+    pCtx.fill();
+    ART['portal'] = portalC;
+
+    // Character Sprite Sheet (Simple 4 dirs x 2 frames)
+    function makeCharSprite(colorShirt) {
+        const frameW = 16;
+        const frameH = 24;
+        const c = createCanvas(frameW*2, frameH*4); // 2 cols (walk), 4 rows (dirs)
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        const drawBody = (x, y, legOffset) => {
+            // Head
+            ctx.fillStyle = PAL.skin;
+            ctx.fillRect(x+4, y+2, 8, 8);
+            // Hair
+            ctx.fillStyle = PAL.black;
+            ctx.fillRect(x+4, y+2, 8, 2);
+            // Body
+            ctx.fillStyle = colorShirt;
+            ctx.fillRect(x+4, y+10, 8, 8);
+            // Legs
+            ctx.fillStyle = PAL.stoneDark;
+            ctx.fillRect(x+4 + legOffset, y+18, 3, 6);
+            ctx.fillRect(x+9 - legOffset, y+18, 3, 6);
+        };
+
+        // Row 0: Down (Front)
+        drawBody(0, 0, 0);
+        drawBody(16, 0, 1); // Walk frame
+        // Row 1: Up (Back)
+        drawBody(0, 24, 0);
+        drawBody(16, 24, 1);
+        // Row 2: Left
+        drawBody(0, 48, 0);
+        drawBody(16, 48, 1);
+        // Row 3: Right
+        drawBody(0, 72, 0);
+        drawBody(16, 72, 1);
+
+        return c;
+    }
+    ART['charPlayer'] = makeCharSprite(PAL.shirtBlue);
+    ART['charNPC1'] = makeCharSprite(PAL.shirtGreen);
+    ART['charNPC2'] = makeCharSprite(PAL.shirtRed);
+}
+
+// --- GAME STATE ---
+const game = {
+    ctx: null,
+    canvas: null,
+    keys: {},
+    player: {
+        x: WORLD_WIDTH/2 * TILE_SIZE,
+        y: WORLD_HEIGHT/2 * TILE_SIZE,
+        speed: 2,
+        dir: 0, // 0=down, 1=up, 2=left, 3=right
+        frame: 0,
+        animTimer: 0,
+        name: "Builder_01",
+        interacting: false
+    },
+    npcs: [
+        { x: 10*TILE_SIZE, y: 10*TILE_SIZE, dir: 0, type: 'idle', sprite: ART['charNPC1'], name: "Alice", status: "available" },
+        { x: 30*TILE_SIZE, y: 20*TILE_SIZE, dir: 1, type: 'wander', sprite: ART['charNPC2'], name: "Bob", status: "working", waypoints: [{x:30,y:20}, {x:35,y:20}, {x:35,y:25}], wpIndex: 0, timer: 0 }
+    ],
+    buildings: [
+        { x: 5, y: 5, w: 7, h: 4, name: "Room A", activity: "Coding", doorState: "open", color: 'roofRed' },
+        { x: 20, y: 5, w: 10, h: 5, name: "Library", activity: "Reading", doorState: "focus", color: 'roofPurple' },
+        { x: 32, y: 5, w: 7, h: 4, name: "Focus Zone", activity: "Deep Work", doorState: "knock", color: 'roofOrange' },
+        { x: 5, y: 20, w: 7, h: 4, name: "Room B", activity: "Designing", doorState: "open", color: 'roofRed' },
+        { x: 20, y: 25, w: 10, h: 5, name: "Community", activity: "Chatting", doorState: "open", color: 'roofPurple' },
+        { x: 32, y: 25, w: 7, h: 4, name: "Room C", activity: "Testing", doorState: "away", color: 'roofOrange' }
+    ],
+    props: [],
+    camera: { x: 0, y: 0 },
+    mapData: [] // 2D array of tile types
+};
+
+function initMap() {
+    // Initialize empty map
+    for(let y=0; y<WORLD_HEIGHT; y++) {
+        game.mapData[y] = [];
+        for(let x=0; x<WORLD_WIDTH; x++) {
+            game.mapData[y][x] = 'grass';
+        }
+    }
+
+    // Pond (Bottom Right)
+    for(let y=25; y<32; y++) {
+        for(let x=30; x<38; x++) {
+            if((x-34)**2 + (y-28)**2 < 25) {
+                game.mapData[y][x] = 'water';
+            }
+        }
+    }
+
+    // Plaza (Center)
+    for(let y=15; y<20; y++) {
+        for(let x=18; x<22; x++) {
+            game.mapData[y][x] = 'brick';
+        }
+    }
+
+    // Paths connecting buildings to plaza
+    // Simple L-shaped paths
+    const pathCoords = [
+        {sx:10, sy:10, ex:18, ey:15}, // Room A to Plaza
+        {sx:25, sy:10, ex:20, ey:15}, // Library to Plaza
+        {sx:35, sy:10, ex:22, ey:15}, // Focus to Plaza
+        {sx:10, sy:22, ex:18, ey:18}, // Room B to Plaza
+        {sx:25, sy:28, ex:20, ey:20}, // Community to Plaza
+        {sx:35, sy:28, ex:22, ey:20}  // Room C to Plaza
+    ];
+
+    pathCoords.forEach(p => {
+        let cx = p.sx;
+        let cy = p.sy;
+        while(cx !== p.ex || cy !== p.ey) {
+            if(game.mapData[cy]) game.mapData[cy][cx] = 'dirt';
+            if(cx < p.ex) cx++;
+            else if(cx > p.ex) cx--;
+            else if(cy < p.ey) cy++;
+            else if(cy > p.ey) cy--;
+        }
+        if(game.mapData[p.ey]) game.mapData[p.ey][p.ex] = 'dirt';
+    });
+
+    // Add some trees and bushes
+    for(let i=0; i<15; i++) {
+        let tx = Math.floor(Math.random() * WORLD_WIDTH);
+        let ty = Math.floor(Math.random() * WORLD_HEIGHT);
+        if(game.mapData[ty][tx] === 'grass' && !isBuildingAt(tx,ty)) {
+            game.props.push({ type: 'tree', x: tx, y: ty, variant: Math.random() > 0.8 ? 'orange' : 'green' });
+        }
+    }
+    for(let i=0; i<20; i++) {
+        let tx = Math.floor(Math.random() * WORLD_WIDTH);
+        let ty = Math.floor(Math.random() * WORLD_HEIGHT);
+        if(game.mapData[ty][tx] === 'grass' && !isBuildingAt(tx,ty)) {
+            game.props.push({ type: 'bush', x: tx, y: ty });
+        }
+    }
+     for(let i=0; i<10; i++) {
+        let tx = Math.floor(Math.random() * WORLD_WIDTH);
+        let ty = Math.floor(Math.random() * WORLD_HEIGHT);
+        if(game.mapData[ty][tx] === 'grass' && !isBuildingAt(tx,ty)) {
+            game.props.push({ type: 'flower', x: tx, y: ty });
+        }
+    }
+    
+    // Well in plaza
+    game.props.push({ type: 'well', x: 20, y: 17 });
+}
+
+function isBuildingAt(tx, ty) {
+    for(let b of game.buildings) {
+        if(tx >= b.x && tx < b.x+b.w && ty >= b.y && ty < b.y+b.h) return true;
+    }
+    return false;
+}
+
+function update() {
+    // Player Movement
+    let dx = 0;
+    let dy = 0;
+    if(game.keys['KeyW']) { dy = -1; game.player.dir = 1; }
+    if(game.keys['KeyS']) { dy = 1; game.player.dir = 0; }
+    if(game.keys['KeyA']) { dx = -1; game.player.dir = 2; }
+    if(game.keys['KeyD']) { dx = 1; game.player.dir = 3; }
+
+    if(dx !== 0 || dy !== 0) {
+        // Normalize diagonal
+        if(dx !== 0 && dy !== 0) {
+            dx *= 0.707;
+            dy *= 0.707;
+        }
+        
+        let newX = game.player.x + dx * game.player.speed;
+        let newY = game.player.y + dy * game.player.speed;
+
+        // Collision Check (Simple AABB against world bounds and water/buildings)
+        let tileX = Math.floor(newX / TILE_SIZE);
+        let tileY = Math.floor(newY / TILE_SIZE);
+        
+        // Check current tile and next tile for simplicity
+        if(tileX >= 0 && tileX < WORLD_WIDTH && tileY >= 0 && tileY < WORLD_HEIGHT) {
+             if(game.mapData[tileY][tileX] !== 'water' && !isBuildingAt(tileX, tileY)) {
+                 game.player.x = newX;
+                 game.player.y = newY;
+                 
+                 // Animation
+                 game.player.animTimer++;
+                 if(game.player.animTimer > 10) {
+                     game.player.frame = (game.player.frame + 1) % 2;
+                     game.player.animTimer = 0;
+                 }
+             }
+        }
+    } else {
+        game.player.frame = 0;
+    }
+
+    // NPC Update
+    game.npcs.forEach(npc => {
+        if(npc.type === 'wander') {
+            npc.timer++;
+            if(npc.timer > 60) { // Move every second approx
+                let target = npc.waypoints[npc.wpIndex];
+                let tx = target.x * TILE_SIZE;
+                let ty = target.y * TILE_SIZE;
+                
+                if(Math.abs(npc.x - tx) > 2 || Math.abs(npc.y - ty) > 2) {
+                    if(npc.x < tx) { npc.x += 1; npc.dir = 3; }
+                    else if(npc.x > tx) { npc.x -= 1; npc.dir = 2; }
+                    else if(npc.y < ty) { npc.y += 1; npc.dir = 0; }
+                    else if(npc.y > ty) { npc.y -= 1; npc.dir = 1; }
+                } else {
+                    npc.wpIndex = (npc.wpIndex + 1) % npc.waypoints.length;
+                }
+                npc.timer = 0;
+            }
+        }
+    });
+
+    // Camera Follow
+    game.camera.x = game.player.x - CANVAS_WIDTH / (2*ZOOM);
+    game.camera.y = game.player.y - CANVAS_HEIGHT / (2*ZOOM);
+    
+    // Clamp Camera
+    const maxCamX = WORLD_WIDTH * TILE_SIZE - CANVAS_WIDTH/ZOOM;
+    const maxCamY = WORLD_HEIGHT * TILE_SIZE - CANVAS_HEIGHT/ZOOM;
+    game.camera.x = Math.max(0, Math.min(maxCamX, game.camera.x));
+    game.camera.y = Math.max(0, Math.min(maxCamY, game.camera.y));
+}
+
+function draw() {
+    const ctx = game.ctx;
+    ctx.save();
+    ctx.scale(ZOOM, ZOOM);
+    ctx.translate(-game.camera.x, -game.camera.y);
+
+    // Clear Background
+    ctx.fillStyle = PAL.black;
+    ctx.fillRect(game.camera.x, game.camera.y, CANVAS_WIDTH/ZOOM, CANVAS_HEIGHT/ZOOM);
+
+    // Draw Tiles
+    for(let y=0; y<WORLD_HEIGHT; y++) {
+        for(let x=0; x<WORLD_WIDTH; x++) {
+            const tileType = game.mapData[y][x];
+            const px = x * TILE_SIZE;
+            const py = y * TILE_SIZE;
+
+            if(tileType === 'grass') {
+                ctx.drawImage(ART['grass'], px, py);
+            } else if(tileType === 'dirt') {
+                ctx.drawImage(ART['dirt'], px, py);
+                // Draw corners if adjacent to grass
+                if(y>0 && game.mapData[y-1][x]==='grass') ctx.drawImage(ART['pathTL'], px, py);
+                if(y<WORLD_HEIGHT-1 && game.mapData[y+1][x]==='grass') ctx.drawImage(ART['pathBL'], px, py);
+                if(x>0 && game.mapData[y][x-1]==='grass') ctx.drawImage(ART['pathTL'], px, py); // Simplified corner logic
+                if(x<WORLD_WIDTH-1 && game.mapData[y][x+1]==='grass') ctx.drawImage(ART['pathTR'], px, py);
+            } else if(tileType === 'brick') {
+                ctx.drawImage(ART['brick'], px, py);
+            } else if(tileType === 'water') {
+                ctx.drawImage(ART['water'], px, py);
+                // Shimmer
+                if(Math.random() > 0.95) {
+                    ctx.fillStyle = PAL.white;
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillRect(px + Math.random()*20, py + Math.random()*20, 2, 2);
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+        }
+    }
+
+    // Draw Props (Sorted by Y for depth)
+    const renderables = [...game.props, ...game.npcs, game.player];
+    renderables.sort((a,b) => a.y - b.y);
+
+    renderables.forEach(item => {
+        const px = item.x !== undefined ? item.x : item.tx * TILE_SIZE;
+        const py = item.y !== undefined ? item.y : item.ty * TILE_SIZE;
+        
+        if(item.type === 'tree') {
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(px + 16, py + 30, 12, 6, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            ctx.drawImage(ART['treeTrunk'], px + 10, py + 10);
+            const canopy = item.variant === 'orange' ? ART['treeCanopyOrange'] : ART['treeCanopyGreen'];
+            ctx.drawImage(canopy, px - 8, py - 20);
+        }
+        else if(item.type === 'bush') {
+            ctx.drawImage(ART['bush'], px + 4, py + 8);
+        }
+        else if(item.type === 'flower') {
+            ctx.drawImage(ART['flowers'], px + 8, py + 8);
+        }
+        else if(item.type === 'well') {
+            ctx.fillStyle = PAL.stoneDark;
+            ctx.fillRect(px + 8, py + 8, 16, 16);
+            ctx.fillStyle = PAL.stoneMid;
+            ctx.fillRect(px + 10, py + 10, 12, 12);
+            ctx.fillStyle = PAL.waterMid;
+            ctx.fillRect(px + 12, py + 12, 8, 8);
+        }
+        else if(item.sprite) { // NPCs and Player
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(px + 8, py + 22, 8, 4, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            // Sprite Sheet Logic
+            // Rows: 0=Down, 1=Up, 2=Left, 3=Right
+            // Cols: 0=Idle, 1=Walk
+            
+            let row = item.dir;
+            let col = item.frame || 0;
+            
+            // Source Rect
+            const sx = col * 16;
+            const sy = row * 24;
+            
+            ctx.drawImage(item.sprite, sx, sy, 16, 24, px, py, 16, 24);
+            
+            // Name Tag
+            ctx.fillStyle = PAL.white;
+            ctx.font = "10px monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(item.name, px + 8, py - 5);
+            
+            // Status Dot
+            let dotColor = PAL.green;
+            if(item.status === 'working') dotColor = PAL.yellow;
+            if(item.status === 'focus') dotColor = PAL.red;
+            if(item.status === 'away') dotColor = PAL.gray;
+            
+            ctx.fillStyle = dotColor;
+            ctx.beginPath();
+            ctx.arc(px + 8 + 15, py - 8, 2, 0, Math.PI*2);
+            ctx.fill();
+        }
+    });
+
+    // Draw Buildings (On top of ground, behind characters usually, but we drew chars sorted. 
+    // For simplicity in this demo, buildings are static structures. We should draw them before chars if they block view, 
+    // but since we don't have complex occlusion, we'll draw them now as overlays or integrate into sort.)
+    // Actually, let's redraw buildings over the ground but under the final UI elements.
+    // To keep it simple and performant without full z-sorting of all entities:
+    
+    game.buildings.forEach(b => {
+        const bx = b.x * TILE_SIZE;
+        const by = b.y * TILE_SIZE;
+        const bw = b.w * TILE_SIZE;
+        const bh = b.h * TILE_SIZE;
+
+        // Wall
+        ctx.fillStyle = b.name.includes("Library") || b.name.includes("Community") ? PAL.stoneMid : PAL.woodMid;
+        ctx.fillRect(bx, by, bw, bh);
+        
+        // Outline
+        ctx.strokeStyle = PAL.black;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        // Roof
+        ctx.fillStyle = b.color === 'roofRed' ? PAL.roofRed : b.color === 'roofOrange' ? PAL.roofOrange : PAL.roofPurple;
+        ctx.beginPath();
+        ctx.moveTo(bx - 5, by);
+        ctx.lineTo(bx + bw/2, by - 20);
+        ctx.lineTo(bx + bw + 5, by);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Door
+        ctx.drawImage(ART['door'], bx + bw/2 - 12, by + bh - 32);
+
+        // State Light
+        let lightColor = PAL.glowGreen;
+        if(b.doorState === 'knock') lightColor = PAL.glowYellow;
+        if(b.doorState === 'focus') lightColor = PAL.glowRed;
+        
+        ctx.fillStyle = lightColor;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = lightColor;
+        ctx.beginPath();
+        ctx.arc(bx + bw/2, by + bh - 40, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Nameplate
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(bx + bw/2 - 30, by - 35, 60, 20);
+        ctx.fillStyle = PAL.white;
+        ctx.font = "bold 10px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(b.name, bx + bw/2, by - 25);
+        ctx.font = "8px monospace";
+        ctx.fillStyle = PAL.zinc400 || '#a1a1aa';
+        ctx.fillText(b.activity, bx + bw/2, by - 18);
+    });
+
+    // Portal
+    ctx.drawImage(ART['portal'], 35 * TILE_SIZE, 15 * TILE_SIZE);
+    ctx.fillStyle = PAL.white;
+    ctx.font = "10px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("WORLD PORTAL", 35*TILE_SIZE + 32, 15*TILE_SIZE - 10);
+
+    ctx.restore();
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function setupInput() {
+    window.addEventListener('keydown', e => {
+        game.keys[e.code] = true;
+        if(e.code === 'KeyE') checkInteraction();
+    });
+    window.addEventListener('keyup', e => {
+        game.keys[e.code] = false;
+    });
+}
+
+function checkInteraction() {
+    // Check proximity to doors or portal
+    const pTileX = Math.floor(game.player.x / TILE_SIZE);
+    const pTileY = Math.floor(game.player.y / TILE_SIZE);
+    
+    // Portal Check
+    if(Math.abs(pTileX - 35) <= 1 && Math.abs(pTileY - 15) <= 2) {
+        alert("Traveling to another hub... (Demo)");
+        return;
+    }
+
+    // Building Check
+    for(let b of game.buildings) {
+        // Approximate door location
+        const doorX = b.x + Math.floor(b.w/2);
+        const doorY = b.y + b.h; // Just below building
+        
+        if(Math.abs(pTileX - doorX) <= 1 && Math.abs(pTileY - doorY) <= 1) {
+            if(b.doorState === 'open') {
+                alert(`Entered ${b.name}. Activity: ${b.activity}`);
+            } else if (b.doorState === 'knock') {
+                alert(`Knocked on ${b.name}'s door.`);
+            } else {
+                alert(`${b.name} is in Focus Mode.`);
+            }
+            return;
+        }
+    }
+}
+
+// --- INIT ---
+window.onload = () => {
+    game.canvas = document.getElementById('gameCanvas');
+    game.canvas.width = CANVAS_WIDTH;
+    game.canvas.height = CANVAS_HEIGHT;
+    game.ctx = game.canvas.getContext('2d');
+    game.ctx.imageSmoothingEnabled = false;
+
+    generateArt();
+    initMap();
+    setupInput();
+    loop();
+};
+
+</script>
+</body>
+</html>
