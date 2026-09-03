@@ -145,6 +145,7 @@ export default function GameShell({
   const [isPublic, setIsPublic] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState(0);
   const [eventForm, setEventForm] = useState({ title: "", hubId: hub, when: "" });
 
   const bumpPassport = (key: string) => {
@@ -421,6 +422,7 @@ export default function GameShell({
         username: playerName,
       });
       setSaveNote("Saved — your door is live");
+      setSavedAt(Date.now());
     } catch (err) {
       setSaveNote(err instanceof Error ? err.message : "Could not save");
     } finally {
@@ -633,6 +635,7 @@ export default function GameShell({
           onSave={() => void saveRoom()}
           saving={saving}
           note={saveNote}
+          savedAt={savedAt}
         />
       )}
 
